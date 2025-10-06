@@ -1,0 +1,10 @@
+You’ll get a .json Postman collection that includes:
+
+#	Endpoint	Method	Description
+1️⃣	/api/cart/add	POST	Add an item to a client’s cart
+2️⃣	/api/cart/:clientID	GET	Retrieve all cart items for a client
+3️⃣	/api/cart/:clientID/:productID	DELETE	Remove specific item from cart
+4️⃣	/api/cart/checkout	POST	Convert cart → order and clear cart
+5️⃣	/api/payments	GET	View all recorded payment transactions
+6️⃣	/api/payments/:clientID	GET	View payment history per client
+7️⃣	/api/payments/add	POST	Add manual/top-up transaction
