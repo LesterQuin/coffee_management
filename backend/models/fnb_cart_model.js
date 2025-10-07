@@ -1,8 +1,8 @@
 // models/fnb_cart_model.js
-import { getPool, sql } from "../config/db_config.js";
+import { poolPromise, sql } from "../config/db_config.js";
 
 export const addItem = async (clientID, productID, quantity, size) => {
-  const pool = await getPool();
+  const pool = await poolPromise;
   await pool.request()
     .input("clientID", sql.Int, clientID)
     .input("productID", sql.Int, productID)
@@ -13,7 +13,7 @@ export const addItem = async (clientID, productID, quantity, size) => {
 };
 
 export const removeItem = async (clientID, productID) => {
-  const pool = await getPool();
+  const pool = await poolPromise;
   await pool.request()
     .input("clientID", sql.Int, clientID)
     .input("productID", sql.Int, productID)
@@ -22,7 +22,7 @@ export const removeItem = async (clientID, productID) => {
 };
 
 export const viewCart = async (clientID) => {
-  const pool = await getPool();
+  const pool = await poolPromise;
   const res = await pool.request()
     .input("clientID", sql.Int, clientID)
     .execute("sg.LQ_CSS_fnb_cart_view");
@@ -30,7 +30,7 @@ export const viewCart = async (clientID) => {
 };
 
 export const checkout = async (clientID, paymentType) => {
-  const pool = await getPool();
+  const pool = await poolPromise;
   const res = await pool.request()
     .input("clientID", sql.Int, clientID)
     .input("paymentType", sql.NVarChar, paymentType)

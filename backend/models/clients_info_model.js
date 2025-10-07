@@ -1,8 +1,8 @@
 // models/clients_info_model.js
-import { getPool, sql } from "../config/db_config.js";
+import { poolPromise, sql } from "../config/db_config.js";
 
 export const registerClient = async (client) => {
-  const pool = await getPool();
+  const pool = await poolPromise;
   const request = pool.request()
     .input("deceasedName", sql.NVarChar(150), client.deceasedName)
     .input("registeredBy", sql.NVarChar(150), client.registeredBy)
@@ -22,7 +22,7 @@ export const registerClient = async (client) => {
 };
 
 export const updateClient = async (data) => {
-  const pool = await getPool();
+  const pool = await poolPromise;
   await pool.request()
     .input("clientID", sql.Int, data.clientID)
     .input("mobileNo", sql.NVarChar(20), data.mobileNo)
@@ -37,7 +37,7 @@ export const updateClient = async (data) => {
 };
 
 export const raiseBalance = async (clientID, amount, type) => {
-  const pool = await getPool();
+  const pool = await poolPromise;
   await pool.request()
     .input("clientID", sql.Int, clientID)
     .input("amount", sql.Decimal(18,2), amount)
@@ -47,7 +47,7 @@ export const raiseBalance = async (clientID, amount, type) => {
 };
 
 export const getClientByPin = async (pin) => {
-  const pool = await getPool();
+  const pool = await poolPromise;
   const res = await pool.request()
     .input("pin", sql.NVarChar, pin)
     .query("SELECT * FROM sg.LQ_CSS_client_info WHERE pin = @pin AND status = 'Active'");
@@ -55,7 +55,7 @@ export const getClientByPin = async (pin) => {
 };
 
 export const getClientById = async (clientID) => {
-  const pool = await getPool();
+  const pool = await poolPromise;
   const res = await pool.request()
     .input("clientID", sql.Int, clientID)
     .query("SELECT * FROM sg.LQ_CSS_client_info WHERE clientID = @clientID");

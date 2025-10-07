@@ -1,29 +1,30 @@
+// backend/config/db_config.js
 import sql from "mssql";
 import dotenv from "dotenv";
-
 dotenv.config();
 
-const dbConfig = {
+const config = {
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
-  server: process.env.DB_SERVER,
-  database: process.env.DB_DATABASE,
+  server: process.env.DB_SERVER, // e.g., "192.5.5.20"
+  database: process.env.DB_NAME,
+  port: 1433,
   options: {
-    encrypt: false, // set true for Azure
-    trustServerCertificate: true // allow self-signed certs
-  }
+    encrypt: false,               // ⛔ turn off SSL if your server doesn't support TLS 1.2+
+    trustServerCertificate: true, // ✅ allows self-signed certs
+  },
+  connectionTimeout: 30000,
+  requestTimeout: 30000,
 };
 
-// Create a connection pool
-const poolPromise = new sql.ConnectionPool(dbConfig)
+export const poolPromise = new sql.ConnectionPool(config)
   .connect()
   .then(pool => {
     console.log("✅ Connected to SQL Server");
     return pool;
   })
   .catch(err => {
-    console.error("❌ Database connection failed:", err);
-    process.exit(1);
+    console.error("❌ DB connection failed:", err);
   });
 
-export { sql, poolPromise };
+export { sql };

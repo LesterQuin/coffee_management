@@ -1,8 +1,8 @@
 // models/orders_info_model.js
-import { getPool, sql } from "../config/db_config.js";
+import { poolPromise, sql } from "../config/db_config.js";
 
 export const placeOrder = async (clientID, productListJson) => {
-  const pool = await getPool();
+  const pool = await poolPromise;
   const request = pool.request()
     .input("clientID", sql.Int, clientID)
     .input("productList", sql.NVarChar, productListJson);
@@ -12,7 +12,7 @@ export const placeOrder = async (clientID, productListJson) => {
 };
 
 export const updateOrderStatus = async (orderID, status) => {
-  const pool = await getPool();
+  const pool = await poolPromise;
   await pool.request()
     .input("orderID", sql.Int, orderID)
     .input("status", sql.NVarChar, status)

@@ -1,9 +1,13 @@
 // routes/staff_info_route.js
 import express from "express";
-import * as Controller from "../controllers/staff_info_controller.js";
+import { staffRegister, staffLogin } from "../controllers/staff_info_controller.js";
+
 const router = express.Router();
 
-router.post("/register", Controller.staffRegister);
-router.post("/login", Controller.staffLogin);
+// POST /api/staff/register
+router.post("/register", staffRegister);
+
+// POST /api/staff/login
+router.post("/login", staffLogin);
 
 export default router;

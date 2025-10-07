@@ -1,14 +1,14 @@
 // models/products_info_model.js
-import { getPool, sql } from "../config/db_config.js";
+import { poolPromise, sql } from "../config/db_config.js";
 
 export const getCategories = async () => {
-  const pool = await getPool();
+  const pool = await poolPromise;
   const res = await pool.request().query("SELECT * FROM sg.LQ_CSS_fnb_categories");
   return res.recordset;
 };
 
 export const createCategory = async (name, description, image) => {
-  const pool = await getPool();
+  const pool = await poolPromise;
   await pool.request()
     .input("name", sql.NVarChar, name)
     .input("description", sql.NVarChar, description ?? null)
@@ -18,7 +18,7 @@ export const createCategory = async (name, description, image) => {
 };
 
 export const createProduct = async (p) => {
-  const pool = await getPool();
+  const pool = await poolPromise;
   await pool.request()
     .input("categoryID", sql.Int, p.categoryID)
     .input("productName", sql.NVarChar, p.productName)
@@ -34,7 +34,7 @@ export const createProduct = async (p) => {
 };
 
 export const getProducts = async () => {
-  const pool = await getPool();
+  const pool = await poolPromise;
   const res = await pool.request().query("SELECT * FROM sg.LQ_CSS_fnb_products");
   return res.recordset;
 };

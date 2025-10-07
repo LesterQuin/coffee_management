@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_BASE = "http://localhost:3000/api"; // replace with your backend URL
+const API_BASE = "http://localhost:5000/api"; // replace with your backend URL
 
 // src/api/placeholder_api.js
 export const testApi = () => {

@@ -386,3 +386,27 @@ BEGIN
     SELECT @orderID AS orderID, @totalAmount AS totalAmount;
 END;
 GO
+
+CREATE TABLE sg.LQ_CSS_staff_accounts (
+    staffID INT IDENTITY(1,1) PRIMARY KEY,
+    fullName NVARCHAR(100) NOT NULL,
+    email NVARCHAR(100) UNIQUE NOT NULL,
+    phone NVARCHAR(20),
+    role NVARCHAR(50) NOT NULL DEFAULT 'staff',
+    passwordHash NVARCHAR(255) NOT NULL,
+    createdAt DATETIME DEFAULT GETDATE(),
+    updatedAt DATETIME DEFAULT GETDATE()
+);
+GO
+
+CREATE PROCEDURE sg.LQ_CSS_staff_login
+    @Email NVARCHAR(100)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT staffID, fullName, email, phone, role, passwordHash
+    FROM sg.LQ_CSS_staff_accounts
+    WHERE email = @Email;
+END;
+GO

@@ -1,8 +1,8 @@
 // models/packages_info_model.js
-import { getPool, sql } from "../config/db_config.js";
+import { poolPromise, sql } from "../config/db_config.js";
 
 export const createPackage = async (pkg) => {
-  const pool = await getPool();
+  const pool = await poolPromise;
   await pool.request()
     .input("packageName", sql.NVarChar, pkg.packageName)
     .input("description", sql.NVarChar, pkg.description ?? null)
@@ -12,7 +12,7 @@ export const createPackage = async (pkg) => {
 };
 
 export const addPackageItem = async (packageID, productID, quantity) => {
-  const pool = await getPool();
+  const pool = await poolPromise;
   await pool.request()
     .input("packageID", sql.Int, packageID)
     .input("productID", sql.Int, productID)

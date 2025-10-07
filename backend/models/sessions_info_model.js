@@ -1,8 +1,8 @@
 // models/sessions_info_model.js
-import { getPool, sql } from "../config/db_config.js";
+import { poolPromise, sql } from "../config/db_config.js";
 
 export const createSession = async ({ clientID, userName, pin, qrDataUrl, expiresAt }) => {
-  const pool = await getPool();
+  const pool = await poolPromise;
   const res = await pool.request()
     .input("clientID", sql.Int, clientID)
     .input("userName", sql.NVarChar, userName)
@@ -16,7 +16,7 @@ export const createSession = async ({ clientID, userName, pin, qrDataUrl, expire
 };
 
 export const getActiveSession = async (userName, pin) => {
-  const pool = await getPool();
+  const pool = await poolPromise;
   const res = await pool.request()
     .input("userName", sql.NVarChar, userName)
     .input("pin", sql.NVarChar, pin)
