@@ -9,6 +9,7 @@ import productRoutes from "./routes/products_info_route.js";
 import packageRoutes from "./routes/packages_info_route.js";
 import orderRoutes from "./routes/orders_info_route.js";
 import sessionRoutes from "./routes/sessions_info_route.js";
+import fnbRoutes from "./routes/fnb_info_route.js";
 
 const app = express();
 
@@ -24,6 +25,7 @@ app.use("/api/products", productRoutes);
 app.use("/api/packages", packageRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/sessions", sessionRoutes);
+app.use("/api/fnb", fnbRoutes);
 
 // Test route
 app.get("/", (req, res) => {
