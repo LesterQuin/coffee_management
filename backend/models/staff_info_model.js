@@ -1,5 +1,13 @@
 import { poolPromise, sql } from "../config/db_config.js";
 
+export const getAllStaff = async () => {
+  const pool = await poolPromise;
+  const result = await pool
+    .request()
+    .query("SELECT * FROM sg.LQ_CSS_staff_accounts");
+  return result.recordset;
+};
+
 export const getStaffByEmail = async (email) => {
   const pool = await poolPromise;
   const result = await pool

@@ -8,3 +8,43 @@ You’ll get a .json Postman collection that includes:
 5️⃣	/api/payments	GET	View all recorded payment transactions
 6️⃣	/api/payments/:clientID	GET	View payment history per client
 7️⃣	/api/payments/add	POST	Add manual/top-up transaction
+
+✅ Already Working
+
+✅ server.js & Express setup
+
+✅ db_config.js connection with MSSQL
+
+✅ /api/staff/register & /api/staff/login routes
+
+✅ JWT + bcrypt verified
+
+Chapel Module
+
+    Create chapel room
+
+    Update status (Available / Occupied)
+
+    List all chapel rooms
+
+Client Module
+
+    Register client (using stored procedure sg.LQ_CSS_client_register)
+
+    Update client info
+
+    Raise balance
+
+F&B Module
+
+    Manage products and categories
+
+    Manage packages and package items
+
+Orders + Cart Module
+
+    dd item to cart
+
+    Checkout cart → Order
+
+    View orders

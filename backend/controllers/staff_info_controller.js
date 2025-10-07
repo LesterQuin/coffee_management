@@ -6,6 +6,16 @@ import dotenv from "dotenv";
 import { success, error } from "../utils/response_helper.js";
 dotenv.config();
 
+export const getAllStaff = async (req, res) => {
+  try {
+    const staffList = await Model.getAllStaff();
+    res.json({ success: true, data: staffList });
+  } catch (err) {
+    console.error(" Error fetching staff:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 export const staffRegister = async (req, res) => {
   try {
     const { fullName, email, phone, role, password } = req.body;
