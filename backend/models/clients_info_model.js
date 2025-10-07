@@ -1,6 +1,21 @@
 // models/clients_info_model.js
 import { poolPromise, sql } from "../config/db_config.js";
 
+// Get all client information
+export const getAllClient = async () => {
+  const pool = await poolPromise;
+  const result = await pool.request()
+    .query(`
+      SELECT clientID, deceasedName, registeredBy, mobileNo, email, address,
+             schedule_from, schedule_to, chapelID, packageNo, pin,
+             packageBalance, additionalBalance, status, createdAt, updatedAt
+      FROM sg.LQ_CSS_client_info
+      ORDER BY createdAt DESC
+    `);
+  return result.recordset;
+}
+
+// Register a new client
 export const registerClient = async (client) => {
   const pool = await poolPromise;
   const request = pool.request()
@@ -20,7 +35,7 @@ export const registerClient = async (client) => {
   await request.execute("sg.LQ_CSS_client_register");
   return true;
 };
-
+// Update client information
 export const updateClient = async (data) => {
   const pool = await poolPromise;
   await pool.request()
@@ -35,7 +50,7 @@ export const updateClient = async (data) => {
     .execute("sg.LQ_CSS_client_update");
   return true;
 };
-
+// Raise client balance
 export const raiseBalance = async (clientID, amount, type) => {
   const pool = await poolPromise;
   await pool.request()
@@ -45,7 +60,7 @@ export const raiseBalance = async (clientID, amount, type) => {
     .execute("sg.LQ_CSS_client_raise_balance");
   return true;
 };
-
+// Get client information by PIN
 export const getClientByPin = async (pin) => {
   const pool = await poolPromise;
   const res = await pool.request()
@@ -53,7 +68,7 @@ export const getClientByPin = async (pin) => {
     .query("SELECT * FROM sg.LQ_CSS_client_info WHERE pin = @pin AND status = 'Active'");
   return res.recordset[0];
 };
-
+// Get client information by ID
 export const getClientById = async (clientID) => {
   const pool = await poolPromise;
   const res = await pool.request()

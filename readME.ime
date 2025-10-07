@@ -21,19 +21,19 @@ You’ll get a .json Postman collection that includes:
 
 Chapel Module
 
-    Create chapel room
+✅ Create chapel room
 
-    Update status (Available / Occupied)
+✅ Update status (Available / Occupied)
 
-    List all chapel rooms
+✅ List all chapel rooms
 
 Client Module
 
-    Register client (using stored procedure sg.LQ_CSS_client_register)
+✅ Register client (using stored procedure sg.LQ_CSS_client_register)
 
-    Update client info
+✅ Update client info
 
-    Raise balance
+✅ Raise balance
 
 F&B Module
 

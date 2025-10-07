@@ -410,3 +410,15 @@ BEGIN
     WHERE email = @Email;
 END;
 GO
+
+CREATE TABLE sg.LQ_CSS_sessions_info (
+    sessionID INT IDENTITY(1,1) PRIMARY KEY,
+    clientID INT NOT NULL,
+    userName NVARCHAR(150),
+    pin NVARCHAR(10),
+    qrDataUrl NVARCHAR(MAX),
+    expiresAt DATETIME NOT NULL,
+    createdAt DATETIME DEFAULT GETDATE(),
+    updatedAt DATETIME DEFAULT GETDATE(),
+    FOREIGN KEY (clientID) REFERENCES sg.LQ_CSS_client_info(clientID)
+);

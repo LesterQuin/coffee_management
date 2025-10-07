@@ -1,0 +1,70 @@
+🔐 1. Staff
+POST → /api/staff/register
+
+Registers a new staff account.
+
+{
+  "fullName": "John Doe",
+  "email": "john@example.com",
+  "phone": "09123456789",
+  "role": "admin",
+  "password": "123456"
+}
+
+POST → /api/staff/login
+
+Logs in a staff member and returns a JWT token.
+
+{
+  "email": "john@example.com",
+  "password": "123456"
+}
+
+
+✅ Save the returned token in your Postman “Environment Variables” as {{token}}.
+
+🏛 2. Chapel
+GET → /api/chapel/
+
+Gets all chapels.
+Headers:
+
+Authorization: Bearer {{token}}
+
+GET → /api/chapel/available
+
+Gets all chapels where status = 'Available'.
+(No token required)
+
+POST → /api/chapel/
+
+Creates a new chapel.
+Headers:
+
+Authorization: Bearer {{token}}
+
+
+Body:
+
+{
+  "chapelName": "Saint Mary Chapel",
+  "description": "Main chapel for ceremonies"
+}
+
+PUT → /api/chapel/status
+
+Updates the chapel’s status.
+Headers:
+
+Authorization: Bearer {{token}}
+
+
+Body:
+
+{
+  "chapelID": 1,
+  "status": "Unavailable"
+}
+
+🌐 Base URL
+http://localhost:5000
