@@ -1,6 +1,6 @@
 // server.js
 import dotenv from "dotenv";
-import app from "./app.js"; // ✅ Import your main app with all routes and middleware
+import app from "./app.js"; //  Import your main app with all routes and middleware
 import { sql, poolPromise } from "./config/db_config.js"; // optional if you still want to test DB connection
 
 dotenv.config();
@@ -10,12 +10,12 @@ dotenv.config();
 
 const PORT = process.env.LOCAL_SERVER_PORT || 5000;
 
-// 🧠 Health check for the server (kept simple)
+// Health check for the server (kept simple)
 app.get("/api/hello", (req, res) => {
   res.json({ message: "Hello world! it's working" });
 });
 
-// 🧠 Optional: Quick DB version test route
+// Optional: Quick DB version test route
 app.get("/api/db-version", async (req, res) => {
   try {
     const pool = await poolPromise;
@@ -27,5 +27,5 @@ app.get("/api/db-version", async (req, res) => {
   }
 });
 
-// 🚀 Start server
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+// Start server
+app.listen(PORT, () => console.log(` Server running on port ${PORT}`));

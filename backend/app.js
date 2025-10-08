@@ -19,7 +19,7 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// ✅ Define route base paths
+//  Define route base paths
 app.use("/api/staff", staffRoutes);
 app.use("/api/chapel", chapelRoutes);
 app.use("/api/clients", clientRoutes);
@@ -33,7 +33,7 @@ app.use("/api/payment", paymentRoutes);
 
 // Test route
 app.get("/", (req, res) => {
-  res.send("Coffee Shop Chapel System API is running 🚀");
+  res.send("Coffee Shop Chapel System API is running ");
 });
 
 export default app;
