@@ -24,4 +24,5 @@ You’ll get a .json Postman collection that includes:
 21 POST http://localhost:5000/api/cart/add
 22 GET http://localhost:5000/api/cart/view/:id
 23 POST http://localhost:5000/api/cart/checkout
-24 GET http://localhost:5000/api/client/1
+24 GET http://localhost:5000/api/client/:id
+25 PUT http://localhost:5000/api/orders/status/:id

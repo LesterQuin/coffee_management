@@ -21,7 +21,23 @@ export const updateStatus = async (req, res) => {
     return error(res, e.message);
   }
 };
+// Update order status
+export const updateOrderStatus = async (req, res) => {
+  try {
+    const { orderID } = req.params;
+    const { status } = req.body;
 
+    if (!orderID || !status) {
+      return error(res, "Missing orderID or status");
+    }
+
+    await Model.updateOrderStatus(orderID, status);
+    return success(res, null, `Order ${orderID} status updated to ${status}`);
+  } catch (e) {
+    return error(res, e.message);
+  }
+};
+// Get all orders for a client
 export const getOrders = async (req, res) => {
   try {
     const { clientID } = req.params;

@@ -16,8 +16,11 @@ export const updateOrderStatus = async (orderID, status) => {
   await pool.request()
     .input("orderID", sql.Int, orderID)
     .input("status", sql.NVarChar, status)
-    .execute("sg.LQ_CSS_fnb_update_order_status");
-  return true;
+    .query(`
+      UPDATE sg.LQ_CSS_fnb_orders
+      SET status = @status, updatedAt = GETDATE()
+      WHERE orderID = @orderID
+    `);
 };
 
 // Get all orders for a client (nested items)
