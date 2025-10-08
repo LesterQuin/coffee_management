@@ -7,6 +7,7 @@ export const getAllCategories = async () => {
   return res.recordset;
 };
 
+// Create a new category
 export const createCategory = async (category) => {
   const pool = await poolPromise;
   await pool.request()
@@ -29,6 +30,7 @@ export const getAllProducts = async () => {
   return res.recordset;
 };
 
+// Create a new product
 export const createProduct = async (product) => {
   const pool = await poolPromise;
   await pool.request()
@@ -54,6 +56,7 @@ export const getAllPackages = async () => {
   return res.recordset;
 };
 
+// Create a new package
 export const createPackage = async (pkg) => {
   const pool = await poolPromise;
   await pool.request()

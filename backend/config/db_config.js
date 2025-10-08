@@ -10,8 +10,8 @@ const config = {
   database: process.env.DB_NAME,
   port: 1433,
   options: {
-    encrypt: false,               // ⛔ turn off SSL if your server doesn't support TLS 1.2+
-    trustServerCertificate: true, // ✅ allows self-signed certs
+    encrypt: false,               
+    trustServerCertificate: true, 
   },
   connectionTimeout: 30000,
   requestTimeout: 30000,
@@ -20,11 +20,11 @@ const config = {
 export const poolPromise = new sql.ConnectionPool(config)
   .connect()
   .then(pool => {
-    console.log("✅ Connected to SQL Server");
+    console.log(" Connected to SQL Server");
     return pool;
   })
   .catch(err => {
-    console.error("❌ DB connection failed:", err);
+    console.error(" DB connection failed:", err);
   });
 
 export { sql };

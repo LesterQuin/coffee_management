@@ -2,6 +2,7 @@
 import * as Model from "../models/packages_info_model.js";
 import { success, error } from "../utils/response_helper.js";
 
+// create a new package
 export const createPackage = async (req, res) => {
   try {
     const pkg = req.body;
@@ -11,7 +12,7 @@ export const createPackage = async (req, res) => {
     return error(res, e.message);
   }
 };
-
+// add item to package
 export const addPackageItem = async (req, res) => {
   try {
     const { packageID, productID, quantity } = req.body;

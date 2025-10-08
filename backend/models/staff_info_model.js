@@ -1,5 +1,6 @@
 import { poolPromise, sql } from "../config/db_config.js";
 
+// Get all staff members
 export const getAllStaff = async () => {
   const pool = await poolPromise;
   const result = await pool
@@ -8,6 +9,7 @@ export const getAllStaff = async () => {
   return result.recordset;
 };
 
+// Get staff by email
 export const getStaffByEmail = async (email) => {
   const pool = await poolPromise;
   const result = await pool
@@ -17,6 +19,7 @@ export const getStaffByEmail = async (email) => {
   return result.recordset[0];
 };
 
+// Create a new staff member
 export const createStaff = async ({ fullName, email, phone, role, passwordHash }) => {
   const pool = await poolPromise;
   await pool

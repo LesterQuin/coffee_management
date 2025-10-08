@@ -4,6 +4,7 @@ import * as Clients from "../models/clients_info_model.js";
 import { success, error } from "../utils/response_helper.js";
 import { generateQrDataUrl } from "../utils/qr_generator.js";
 
+// Client login
 export const clientLogin = async (req, res) => {
   try {
     const { userName, pin } = req.body;

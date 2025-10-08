@@ -10,7 +10,7 @@ export const listCategories = async (req, res) => {
     return error(res, e.message);
   }
 };
-
+// Create a new category
 export const createCategory = async (req, res) => {
   try {
     await Model.createCategory(req.body);
@@ -29,7 +29,7 @@ export const listProducts = async (req, res) => {
     return error(res, e.message);
   }
 };
-
+// Create a new product
 export const createProduct = async (req, res) => {
   try {
     const product = req.body;
@@ -49,7 +49,7 @@ export const listPackages = async (req, res) => {
     return error(res, e.message);
   }
 };
-
+// Create a new package
 export const createPackage = async (req, res) => {
   try {
     await Model.createPackage(req.body);
@@ -58,7 +58,7 @@ export const createPackage = async (req, res) => {
     return error(res, e.message);
   }
 };
-
+// Add item to package
 export const addPackageItem = async (req, res) => {
   try {
     const { packageID, productID, quantity } = req.body;

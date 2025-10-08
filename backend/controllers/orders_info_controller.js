@@ -2,6 +2,7 @@
 import * as Model from "../models/orders_info_model.js";
 import { success, error } from "../utils/response_helper.js";
 
+// Place a new order
 export const placeOrder = async (req, res) => {
   try {
     const { clientID } = req.body;
@@ -11,7 +12,7 @@ export const placeOrder = async (req, res) => {
     return error(res, e.message);
   }
 };
-
+// Update order status
 export const updateStatus = async (req, res) => {
   try {
     const { orderID, status } = req.body;

@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 import { success, error } from "../utils/response_helper.js";
 dotenv.config();
 
+// Get all staff members
 export const getAllStaff = async (req, res) => {
   try {
     const staffList = await Model.getAllStaff();
@@ -16,6 +17,7 @@ export const getAllStaff = async (req, res) => {
   }
 };
 
+// Staff registration
 export const staffRegister = async (req, res) => {
   try {
     const { fullName, email, phone, role, password } = req.body;
@@ -27,6 +29,7 @@ export const staffRegister = async (req, res) => {
   }
 };
 
+// Staff login
 export const staffLogin = async (req, res) => {
   try {
     const { email, password } = req.body;
