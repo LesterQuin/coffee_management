@@ -1,8 +1,7 @@
-🔐 1. Staff
+**🔐 1. Staff**
 POST → /api/staff/register
 
 Registers a new staff account.
-
 {
   "fullName": "John Doe",
   "email": "john@example.com",
@@ -14,7 +13,6 @@ Registers a new staff account.
 POST → /api/staff/login
 
 Logs in a staff member and returns a JWT token.
-
 {
   "email": "john@example.com",
   "password": "123456"
@@ -23,7 +21,7 @@ Logs in a staff member and returns a JWT token.
 
 ✅ Save the returned token in your Postman “Environment Variables” as {{token}}.
 
-🏛 2. Chapel
+**🏛 2. Chapel**
 GET → /api/chapel/
 
 Gets all chapels.
@@ -64,6 +62,333 @@ Body:
 {
   "chapelID": 1,
   "status": "Unavailable"
+}
+
+**🔹3. Clients**
+GET → /api/clients/
+
+Get all clients.
+Headers:
+
+Authorization: Bearer {{token}}
+
+
+Response: List of clients with details.
+
+POST → /api/clients/register
+
+Register a new client.
+Headers:
+
+Authorization: Bearer {{token}}
+
+
+Body Example:
+
+{
+  "deceasedName": "Jane Doe",
+  "registeredBy": "Admin",
+  "mobileNo": "09123456789",
+  "email": "client@example.com",
+  "address": "123 Street",
+  "scheduleFrom": "2025-10-10T08:00:00",
+  "scheduleTo": "2025-10-10T10:00:00",
+  "chapelID": 1,
+  "packageNo": 1,
+  "pin": "3014",
+  "packageBalance": 1000,
+  "additionalBalance": 200
+}
+
+
+Response:
+
+{
+  "success": true,
+  "message": "Client registered",
+  "data": {
+    "pin": "3014",
+    "qr": "<qr_code_data_url>"
+  }
+}
+
+PUT → /api/clients/update
+
+Update client information.
+Headers:
+
+Authorization: Bearer {{token}}
+
+
+Body Example:
+
+{
+  "clientID": 1,
+  "mobileNo": "09123456780",
+  "email": "newemail@example.com",
+  "address": "456 Street",
+  "scheduleFrom": "2025-10-11T08:00:00",
+  "scheduleTo": "2025-10-11T10:00:00",
+  "packageBalance": 1200,
+  "additionalBalance": 300
+}
+
+POST → /api/clients/raise-balance
+
+Raise client balance.
+Headers:
+
+Authorization: Bearer {{token}}
+
+
+Body Example:
+
+{
+  "clientID": 1,
+  "amount": 500,
+  "type": "Package"  // "Package" or "Additional"
+}
+
+POST → /api/clients/login
+
+Client login using PIN.
+Body Example:
+
+{
+  "userName": "Jane Doe",
+  "pin": "3014"
+}
+
+
+Response:
+
+{
+  "success": true,
+  "message": "Login successful",
+  "data": {
+    "sessionId": 1,
+    "clientID": 1,
+    "expiresAt": "2025-10-07T14:00:00"
+  }
+}
+
+**🔹4. F&B Products & Packages**
+POST → /api/products/
+
+Add a new product.
+Headers:
+
+Authorization: Bearer {{token}}
+
+
+Body Example:
+
+{
+  "categoryID": 1,
+  "productName": "Rose Lychee Fizz",
+  "description": "Sweet Lychee Fruit",
+  "price": 160.0,
+  "size": "16 oz",
+  "image": "Lychee.jpg",
+  "isAvailable": 1
+}
+
+POST → /api/packages/
+
+Add a new package.
+Headers:
+
+Authorization: Bearer {{token}}
+
+
+Body Example:
+
+{
+  "packageName": "Fruit Combo",
+  "description": "Mixed fruits and drinks",
+  "totalValue": 500
+}
+
+POST → /api/packages/items
+
+Add a product to a package.
+Headers:
+
+Authorization: Bearer {{token}}
+
+
+Body Example:
+
+{
+  "packageID": 1,
+  "productID": 2,
+  "quantity": 3
+}
+
+**🔹5. Cart**
+POST → /api/cart/add
+
+Add an item to the client’s cart.
+Headers:
+
+Authorization: Bearer {{token}}
+
+
+Body Example:
+
+{
+  "clientID": 1,
+  "productID": 2,
+  "quantity": 3,
+  "size": "16 oz"
+}
+
+POST → /api/cart/remove
+
+Remove an item from the cart.
+Headers:
+
+Authorization: Bearer {{token}}
+
+
+Body Example:
+
+{
+  "clientID": 1,
+  "productID": 2
+}
+
+GET → /api/cart/view/:clientID
+
+View all items in a client’s cart.
+Headers:
+
+Authorization: Bearer {{token}}
+
+
+Example URL:
+
+GET /api/cart/view/1
+
+
+Response Example:
+
+{
+  "success": true,
+  "message": "Cart retrieved",
+  "data": [
+    {
+      "productName": "Rose Lychee Fizz",
+      "price": 160.0,
+      "quantity": 3,
+      "size": "16 oz",
+      "total": 480
+    }
+  ]
+}
+
+POST → /api/cart/checkout
+
+Checkout the cart and create an order.
+Headers:
+
+Authorization: Bearer {{token}}
+
+
+Body Example:
+
+{
+  "clientID": 1,
+  "paymentType": "Package"  // "Package" or "Additional"
+}
+
+
+Response Example:
+
+{
+  "success": true,
+  "message": "Cart checked out",
+  "data": {
+    "orderID": 10,
+    "totalAmount": 480
+  }
+}
+
+**🔹6. Orders**
+POST → /api/orders/place
+
+Place a direct order (without using cart).
+Headers:
+
+Authorization: Bearer {{token}}
+
+
+Body Example:
+
+{
+  "clientID": 1,
+  "products": [
+    { "productID": 2, "quantity": 3, "size": "16 oz" },
+    { "productID": 3, "quantity": 1, "size": "12 oz" }
+  ]
+}
+
+
+Response Example:
+
+{
+  "success": true,
+  "message": "Order created",
+  "data": {
+    "orderID": 11
+  }
+}
+
+PUT → /api/orders/status
+
+Update the status of an order.
+Headers:
+
+Authorization: Bearer {{token}}
+
+
+Body Example:
+
+{
+  "orderID": 11,
+  "status": "Completed"
+}
+
+GET → /api/orders/client/:clientID
+
+Get all orders for a client with nested order items.
+Headers:
+
+Authorization: Bearer {{token}}
+
+
+Example URL:
+
+GET /api/orders/client/1
+
+
+Response Example:
+
+{
+  "success": true,
+  "message": "Client orders retrieved",
+  "data": [
+    {
+      "orderID": 11,
+      "status": "Pending",
+      "createdAt": "2025-10-07T08:00:00",
+      "updatedAt": "2025-10-07T08:10:00",
+      "items": [
+        { "productID": 2, "productName": "Rose Lychee Fizz", "quantity": 3, "size": "16 oz", "price": 160 },
+        { "productID": 3, "productName": "Green Tea Latte", "quantity": 1, "size": "12 oz", "price": 120 }
+      ]
+    }
+  ]
 }
 
 🌐 Base URL

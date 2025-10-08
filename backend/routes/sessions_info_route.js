@@ -3,6 +3,7 @@ import express from "express";
 import * as Controller from "../controllers/sessions_info_controller.js";
 const router = express.Router();
 
+// Client login
 router.post("/client-login", Controller.clientLogin);
 
 export default router;

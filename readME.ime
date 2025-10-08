@@ -1,50 +1,27 @@
 You’ll get a .json Postman collection that includes:
 
 #	Endpoint	Method	Description
-1️⃣	/api/cart/add	POST	Add an item to a client’s cart
-2️⃣	/api/cart/:clientID	GET	Retrieve all cart items for a client
-3️⃣	/api/cart/:clientID/:productID	DELETE	Remove specific item from cart
-4️⃣	/api/cart/checkout	POST	Convert cart → order and clear cart
-5️⃣	/api/payments	GET	View all recorded payment transactions
-6️⃣	/api/payments/:clientID	GET	View payment history per client
-7️⃣	/api/payments/add	POST	Add manual/top-up transaction
-
-✅ Already Working
-
-✅ server.js & Express setup
-
-✅ db_config.js connection with MSSQL
-
-✅ /api/staff/register & /api/staff/login routes
-
-✅ JWT + bcrypt verified
-
-Chapel Module
-
-✅ Create chapel room
-
-✅ Update status (Available / Occupied)
-
-✅ List all chapel rooms
-
-Client Module
-
-✅ Register client (using stored procedure sg.LQ_CSS_client_register)
-
-✅ Update client info
-
-✅ Raise balance
-
-F&B Module
-
-✅ Manage products and categories
-
-✅ Manage packages and package items
-
-Orders + Cart Module
-
-✅ add item to cart
-
-✅ Checkout cart → Order
-
-✅ View orders
+1 POST http://localhost:5000/api/staff/register
+2 POST http://localhost:5000/api/staff/login
+3 GET http://localhost:5000/api/staff
+4 POST http://localhost:5000/api/chapel
+5 GET http://localhost:5000/api/chapel/available
+6 PUT http://localhost:5000/api/chapel/status
+7 GET http://localhost:5000/api/clients
+8 POST http://localhost:5000/api/clients/register
+9 POST http://localhost:5000/api/clients/login
+10 PUT http://localhost:5000/api/clients/update
+11 PUT http://localhost:5000/api/clients/raise-balance
+12 GET http://localhost:5000/api/clients/:id
+13 GET http://localhost:5000/api/clinets/pin/3014
+14 GET http://localhost:5000/api/fnb/categories
+15 POST http://localhost:5000/api/fnb/categories
+16 GET http://localhost:5000/api/fnb/products
+17 POST http://localhost:5000/api/fnb/products
+18 GET http://localhost:5000/api/fnb/packages
+19 POST http://localhost:5000/api/fnb/packages
+20 POST http://localhost:5000/api/fnb/packages/items
+21 POST http://localhost:5000/api/cart/add
+22 GET http://localhost:5000/api/cart/view/:id
+23 POST http://localhost:5000/api/cart/checkout
+24 GET http://localhost:5000/api/client/1
