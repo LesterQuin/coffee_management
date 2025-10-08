@@ -23,6 +23,7 @@ export const staffRegister = async (req, res) => {
     const { fullName, email, phone, role, password } = req.body;
     const hash = await bcrypt.hash(password, 10);
     await Model.createStaff({ fullName, email, phone, role, passwordHash: hash });
+   
     return success(res, null, "Staff created");
   } catch (e) {
     return error(res, e.message);
@@ -33,12 +34,38 @@ export const staffRegister = async (req, res) => {
 export const staffLogin = async (req, res) => {
   try {
     const { email, password } = req.body;
+    
+    if (!email || !password)
+      return error(res, "Email and password are required", 400);
+
     const staff = await Model.getStaffByEmail(email);
     if (!staff) return error(res, "Invalid credentials", 400);
+
     const ok = await bcrypt.compare(password, staff.passwordHash);
     if (!ok) return error(res, "Invalid credentials", 400);
-    const token = jwt.sign({ staffID: staff.staffID, email: staff.email, role: staff.role }, process.env.JWT_SECRET, { expiresIn: "12h" });
-    return success(res, { token }, "Login successful");
+    
+    const token = jwt.sign(
+      {
+        staffID: staff.staffID,
+        email: staff.email,
+        role: staff.role
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "12h" }
+    );
+    return success(
+      res,
+      {
+        token,
+        staff: {
+          staffID: staff.staffID,
+          fullName: staff.fullName,
+          email: staff.email,
+          role: staff.role
+        }
+      },
+      "Login successful"
+    );
   } catch (e) {
     return error(res, e.message);
   }
