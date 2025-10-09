@@ -58,12 +58,37 @@ export const createPackage = async (req, res) => {
     return error(res, e.message);
   }
 };
-// Add item to package
+// List items in a package
+export const listPackageItems = async (req, res) => {
+  try {
+    const { packageID } = req.params;
+    console.log("📦 Fetching items for packageID:", packageID);
+    const data = await Model.getPackageItems(packageID);
+    return success(res, data, "Package items fetched successfully");
+  } catch (e) {
+    console.error("❌ Error in listPackageItems:", e);
+    return error(res, e.message);
+  }
+};
+
+// Add item to a package
 export const addPackageItem = async (req, res) => {
   try {
-    const { packageID, productID, quantity } = req.body;
+    const { packageID } = req.params;
+    const { productID, quantity } = req.body;
     await Model.addPackageItem(packageID, productID, quantity);
     return success(res, null, "Package item added");
+  } catch (e) {
+    return error(res, e.message);
+  }
+};
+
+// Delete item from a package
+export const deletePackageItem = async (req, res) => {
+  try {
+    const { itemId } = req.params;
+    await Model.deletePackageItem(itemId);
+    return success(res, null, "Package item deleted successfully");
   } catch (e) {
     return error(res, e.message);
   }

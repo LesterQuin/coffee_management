@@ -1,17 +1,13 @@
-import React from "react";
-import { Link } from "react-router-dom";
-
-const Navbar = () => {
+export default function Navbar({ onLogout }) {
   return (
-    <nav style={{ padding: "1rem", backgroundColor: "#333", color: "#fff" }}>
-      <Link to="/dashboard" style={{ color: "#fff", marginRight: "1rem" }}>
-        Dashboard
-      </Link>
-      <Link to="/" style={{ color: "#fff" }}>
+    <div className="bg-white shadow p-4 flex justify-between items-center">
+      <h1 className="text-xl font-semibold">LQ Admin Dashboard</h1>
+      <button
+        onClick={onLogout}
+        className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
+      >
         Logout
-      </Link>
-    </nav>
+      </button>
+    </div>
   );
-};
-
-export default Navbar;
+}

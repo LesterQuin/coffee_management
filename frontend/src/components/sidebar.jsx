@@ -1,26 +1,32 @@
-import React from "react";
-import { Link } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 
-const Sidebar = () => {
+export default function Sidebar() {
+  const menu = [
+    { name: "Dashboard", path: "/dashboard" },
+    { name: "Staff", path: "/staff" },
+    { name: "Chapel", path: "/chapel" },
+    { name: "F&B", path: "/fnb" },
+    { name: "Reports", path: "/reports" },
+  ];
+
   return (
-    <div style={{
-      width: "220px",
-      height: "100vh",
-      backgroundColor: "#1f2937",
-      color: "#fff",
-      padding: "1rem",
-      position: "fixed"
-    }}>
-      <h2>Coffee Shop</h2>
-      <nav style={{ marginTop: "2rem" }}>
-        <Link to="/dashboard" style={{ display: "block", margin: "1rem 0", color: "#fff" }}>Dashboard</Link>
-        <Link to="/dashboard/chapels" style={{ display: "block", margin: "1rem 0", color: "#fff" }}>Chapels</Link>
-        <Link to="/dashboard/clients" style={{ display: "block", margin: "1rem 0", color: "#fff" }}>Clients</Link>
-        <Link to="/dashboard/orders" style={{ display: "block", margin: "1rem 0", color: "#fff" }}>Orders</Link>
-        <Link to="/dashboard/fnb" style={{ display: "block", margin: "1rem 0", color: "#fff" }}>Food and Beverages</Link>
+    <div className="w-64 h-screen bg-gray-900 text-white flex flex-col">
+      <h2 className="text-2xl font-bold p-4 border-b border-gray-700">Admin</h2>
+      <nav className="flex-1 p-4">
+        {menu.map((item) => (
+          <NavLink
+            key={item.name}
+            to={item.path}
+            className={({ isActive }) =>
+              `block py-2 px-3 rounded hover:bg-gray-700 ${
+                isActive ? "bg-gray-700 font-semibold" : ""
+              }`
+            }
+          >
+            {item.name}
+          </NavLink>
+        ))}
       </nav>
     </div>
   );
-};
-
-export default Sidebar;
+}

@@ -3,7 +3,9 @@ import { poolPromise, sql } from "../config/db_config.js";
 // Categories
 export const getAllCategories = async () => {
   const pool = await poolPromise;
-  const res = await pool.request().query("SELECT * FROM sg.LQ_CSS_fnb_categories ORDER BY categoryName");
+  const res = await pool.request().query(
+    "SELECT * FROM sg.LQ_CSS_fnb_categories ORDER BY categoryName"
+  );
   return res.recordset;
 };
 
@@ -74,6 +76,37 @@ export const addPackageItem = async (packageID, productID, quantity) => {
     .input("packageID", sql.Int, packageID)
     .input("productID", sql.Int, productID)
     .input("quantity", sql.Int, quantity)
-    .query("INSERT INTO sg.LQ_CSS_fnb_package_items (packageID, productID, quantity) VALUES (@packageID,@productID,@quantity)");
-  return true;
+    .query(`
+      INSERT INTO [DHUB].[sg].[LQ_CSS_fnb_package_items] 
+        (packageID, productID, quantity)
+      VALUES (@packageID, @productID, @quantity)
+    `);
 };
+
+
+// Get items in a package
+export const getPackageItems = async (packageID) => {
+  const pool = await poolPromise;
+  const res = await pool.request()
+    .input("packageID", sql.Int, packageID)
+    .query(`
+      SELECT i.packageItemID, i.packageID, i.productID, p.productName, p.price, i.quantity
+      FROM [DHUB].[sg].[LQ_CSS_fnb_package_items] i
+      INNER JOIN [DHUB].[sg].[LQ_CSS_fnb_products] p
+        ON i.productID = p.productID
+      WHERE i.packageID = @packageID
+    `);
+  return res.recordset;
+};
+
+// Delete item from package
+export const deletePackageItem = async (packageItemID) => {
+  const pool = await poolPromise;
+  await pool.request()
+    .input("packageItemID", sql.Int, packageItemID)
+    .query(`
+      DELETE FROM [DHUB].[sg].[LQ_CSS_fnb_package_items]
+      WHERE packageItemID = @packageItemID
+    `);
+};
+
