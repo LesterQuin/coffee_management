@@ -44,3 +44,13 @@ export const setChapelStatus = async (chapelID, status) => {
     .execute("sg.LQ_CSS_chapel_set_status");
   return true;
 };
+
+// Delete
+
+export const deleteChapel = async (chapelID) => {
+  const pool = await poolPromise;
+  const res = await pool.request()
+    .input("chapelID", sql.Int, chapelID)
+    .query("DELETE FROM sg.LQ_CSS_chapel_rooms WHERE chapelID = @chapelID");
+  return res.rowsAffected[0] > 0;
+};

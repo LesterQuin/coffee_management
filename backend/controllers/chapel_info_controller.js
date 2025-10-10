@@ -41,3 +41,15 @@ export const setStatus = async (req, res) => {
     return error(res, e.message);
   }
 };
+// delete
+export const deleteChapel = async (req, res) => {
+  const { chapelID } = req.params;
+  try {
+    const result = await Model.deleteChapel(chapelID);
+    if (!result) return res.status(404).json({ success: false, message: "Chapel not found" });
+    res.json({ success: true, message: "Chapel deleted successfully" });
+  } catch (err) {
+    console.error("Delete chapel error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};

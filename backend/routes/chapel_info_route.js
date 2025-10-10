@@ -7,10 +7,12 @@ const router = express.Router();
 // Get all chapels
 router.get("/", staffAuth, Controller.getAllChapels);
 // Get all available chapels
-router.get("/available", Controller.listAvailable);
+router.get("/available", staffAuth ,Controller.listAvailable);
 // Create a new chapel room
 router.post("/", staffAuth, Controller.create);
 // Set the status of a chapel room
-router.put("/status", staffAuth, Controller.setStatus);
+router.put("/status/:chapelID", staffAuth, Controller.setStatus);
+// Delete
+router.delete("/:chapelID", Controller.deleteChapel);
 
 export default router;

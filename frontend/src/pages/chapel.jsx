@@ -34,7 +34,7 @@ export default function Chapel() {
     e.preventDefault();
     setLoading(true);
     try {
-      await axios.post("http://localhost:5000/api/chapel/create", form, {
+      await axios.post("http://localhost:5000/api/chapel", form, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setForm({ chapelName: "", description: "", status: "Available" });
@@ -49,12 +49,11 @@ export default function Chapel() {
   // ✅ Update chapel status
   const handleStatusChange = async (id, newStatus) => {
     try {
-      await axios.put(
-        `http://localhost:5000/api/chapel/status/${id}`,
-        { status: newStatus },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      fetchChapels();
+      await axios.put(`http://localhost:5000/api/chapel/status/${id}`, 
+          { status: newStatus },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        fetchChapels();
     } catch {
       setError("Failed to update chapel status");
     }
