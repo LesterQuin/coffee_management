@@ -43,3 +43,38 @@ export const staffLogin = async (req, res) => {
     return error(res, e.message);
   }
 };
+
+// Get ID
+export const getStaffByID = async (req, res) => {
+  const { staffID } = req.params;
+  try {
+    const staff = await Model.getStaffByID(staffID);
+    if (!staff) return res.status(404).json({ success: false, message: "Staff not found" });
+    return res.json({ success: true, data: staff });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// delete ID
+export const deleteStaff = async (req, res) => {
+  try {
+    const { staffID } = req.params;
+
+    if (!staffID) {
+      return res.status(400).json({ success: false, message: "Staff ID required" });
+    }
+
+    // Use your model's delete function
+    const deleted = await Model.deleteStaffModel(staffID); // make sure this exists in your model
+
+    if (!deleted) {
+      return res.status(404).json({ success: false, message: "Staff not found" });
+    }
+
+    res.json({ success: true, message: "Staff deleted successfully" });
+  } catch (err) {
+    console.error("Delete staff error:", err); // check this log in server console
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};

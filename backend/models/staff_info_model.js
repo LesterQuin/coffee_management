@@ -34,3 +34,20 @@ export const createStaff = async ({ fullName, email, phone, role, passwordHash }
       VALUES (@fullName, @email, @phone, @role, @passwordHash, 'Active', GETDATE(), GETDATE())
     `);
 };
+
+// get id
+export const getStaffByID = async (staffID) => {
+  const pool = await poolPromise;
+  const res = await pool.request()
+    .input("staffID", sql.Int, staffID)
+    .query("SELECT * FROM sg.LQ_CSS_staff_accounts WHERE staffID = @staffID");
+  return res.recordset[0];
+};
+
+export const deleteStaffModel = async (staffID) => {
+  const pool = await poolPromise;
+  const res = await pool.request()
+    .input("staffID", sql.Int, staffID)
+    .query("DELETE FROM sg.LQ_CSS_staff_accounts WHERE staffID = @staffID");
+  return res.rowsAffected[0] > 0;
+}

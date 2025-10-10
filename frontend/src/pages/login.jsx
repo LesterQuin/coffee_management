@@ -12,19 +12,45 @@ export default function Login() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    setError("");
+
     try {
       const res = await axios.post("http://localhost:5000/api/staff/login", {
         email,
         password,
       });
+
       if (res.data.success) {
-        login(res.data.data.token);
-        navigate("/dashboard");
+        const token = res.data.data.token;
+        let user = null;
+
+        try {
+          const payload = JSON.parse(atob(token.split(".")[1]));
+          user = {
+            email: payload.email,
+            role: payload.role || "Admin",
+            staffID: payload.staffID || null,
+          };
+        } catch (err) {
+          console.warn("Failed to decode token payload:", err);
+        }
+
+        login(token, user);
+
+        // Redirect based on role
+        if (user?.role?.toLowerCase() === "cashier") {
+          navigate("/cashier_dashboard");
+        } else {
+          navigate("/dashboard");
+        }
       } else {
-        setError(res.data.message);
+        setError(res.data.message || "Invalid credentials");
       }
     } catch (err) {
-      setError("Login failed. Check your credentials or server.");
+      setError(
+        err.response?.data?.message ||
+          "Login failed. Please check your credentials"
+      );
     }
   };
 
@@ -34,8 +60,12 @@ export default function Login() {
         onSubmit={handleLogin}
         className="bg-white p-8 rounded shadow-md w-96 space-y-4"
       >
-        <h2 className="text-2xl font-semibold text-center mb-4">Admin Login</h2>
+        <h2 className="text-2xl font-semibold text-center mb-4">
+          System Login
+        </h2>
+
         {error && <p className="text-red-500 text-center">{error}</p>}
+
         <div>
           <label className="block text-sm font-medium mb-1">Email</label>
           <input
@@ -46,6 +76,7 @@ export default function Login() {
             required
           />
         </div>
+
         <div>
           <label className="block text-sm font-medium mb-1">Password</label>
           <input
@@ -56,6 +87,7 @@ export default function Login() {
             required
           />
         </div>
+
         <button
           type="submit"
           className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700"

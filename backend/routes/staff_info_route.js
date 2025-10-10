@@ -14,4 +14,10 @@ router.post("/register", staffRegister);
 // POST /api/staff/login
 router.post("/login", staffLogin);
 
+// GET /api/staff/id
+router.get("/:staffID", Controller.getStaffByID);
+
+// DELETE api/staff/:id
+router.delete("/:staffID", Controller.deleteStaff);
+
 export default router;

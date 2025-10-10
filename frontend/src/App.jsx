@@ -7,49 +7,84 @@ import Chapel from "./pages/chapel";
 import Fnb from "./pages/fnb";
 import Reports from "./pages/reports";
 import Login from "./pages/login";
+import CashierDashboard from "./pages/cashier_dashboard";
+import Unauthorized from "./pages/unauthorized";
 import ProtectedRoute from "./context/protected_route";
-import { AuthProvider, useAuth} from "./context/auth_context";
+import { AuthProvider, useAuth } from "./context/auth_context";
 
-function Layout() {
+function AdminLayout() {
   const { logout } = useAuth();
+
   return (
     <div className="flex">
       <Sidebar />
-      <div className="flex-1 flex flex-col h-screen overflow-y-auto">
+      <div className="flex-1 flex-col h-screen overflow-y-auto">
         <Navbar onLogout={logout} />
-        <div className="flex-1 bg-gray-100">
-            <Routes>
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/staff" element={<Staff />} />
-              <Route path="/chapel" element={<Chapel />} />
-              <Route path="/fnb" element={<Fnb />} />
-              <Route path="/reports" element={<Reports />} />
-            </Routes>
-          </div>
+        <div className="flex-1 bg-gray-100 p-4">
+          <Routes>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/staff" element={<Staff />} />
+            <Route path="/chapel" element={<Chapel />} />
+            <Route path="/fnb" element={<Fnb />} />
+            <Route path="/report" element={<Reports />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
         </div>
       </div>
+    </div>
   );
 }
 
-function App() {
-  return(
+function CashierLayout() {
+  const { logout } = useAuth();
+
+  return (
+    <div className="flex flex-col h-screen bg-gray-100 p-6">
+      <div className="flex justify-between items-center mb-4">
+        <h1 className="text-xl font-semibold text-green-700">LQ Cashier Panel</h1>
+        <button
+          onClick={logout}
+          className="bg-red-500 text-white px-4 py-1 rounded hover:bg-red-600"
+        >
+          Logout
+        </button>
+      </div>
+
+      <Routes>
+        <Route path="/cashier_dashboard" element={<CashierDashboard />} />
+        <Route path="*" element={<Navigate to="/cashier_dashboard" replace />} />
+      </Routes>
+    </div>
+  );
+}
+
+function LayoutSelector() {
+  const { user } = useAuth();
+
+  if (user?.role?.toLowerCase() === "cashier") {
+    return <CashierLayout />;
+  }
+
+  return <AdminLayout />;
+}
+
+export default function App() {
+  return (
     <AuthProvider>
       <Router>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/unauthorized" element={<Unauthorized />} />
           <Route
             path="/*"
-            element = {
+            element={
               <ProtectedRoute>
-                <Layout />
+                <LayoutSelector />
               </ProtectedRoute>
             }
           />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </Router>
     </AuthProvider>
   );
 }
-
-export default App;

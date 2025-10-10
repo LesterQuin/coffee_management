@@ -1,3 +1,4 @@
+// src/pages/staff.jsx
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { useAuth } from "../context/auth_context";
@@ -15,7 +16,7 @@ export default function Staff() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // ✅ load staff list
+  // Load staff list
   const fetchStaff = async () => {
     try {
       const res = await axios.get("http://localhost:5000/api/staff", {
@@ -31,7 +32,7 @@ export default function Staff() {
     fetchStaff();
   }, []);
 
-  // ✅ create staff
+  // Create staff
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -48,16 +49,19 @@ export default function Staff() {
     }
   };
 
-  // ✅ delete staff
-  const handleDelete = async (id) => {
+  // Delete staff
+  const handleDelete = async (staffID) => {
     if (!confirm("Are you sure you want to delete this staff?")) return;
+
     try {
-      await axios.delete(`http://localhost:5000/api/staff/${id}`, {
+      await axios.delete(`http://localhost:5000/api/staff/${staffID}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      setStaffList(staffList.filter((s) => s.staffID !== id));
-    } catch {
-      setError("Failed to delete staff");
+      // Update local state
+      setStaffList((prev) => prev.filter((s) => s.staffID !== staffID));
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.message || "Failed to delete staff");
     }
   };
 
@@ -99,7 +103,7 @@ export default function Staff() {
           className="border p-2 rounded min-w-[120px]"
         >
           <option>Admin</option>
-          <option>Manager</option>
+          <option>Casier</option>
           <option>Staff</option>
         </select>
         <input
@@ -129,7 +133,6 @@ export default function Staff() {
             <th className="py-2 px-4 text-left">Email</th>
             <th className="py-2 px-4 text-left">Phone</th>
             <th className="py-2 px-4 text-left">Role</th>
-            <th className="py-2 px-4 text-left">Status</th>
             <th className="py-2 px-4 text-center">Action</th>
           </tr>
         </thead>
@@ -140,7 +143,6 @@ export default function Staff() {
               <td className="py-2 px-4">{s.email}</td>
               <td className="py-2 px-4">{s.phone}</td>
               <td className="py-2 px-4">{s.role}</td>
-              <td className="py-2 px-4">{s.isActive ? "Active" : "Inactive"}</td>
               <td className="py-2 px-4 text-center">
                 <button
                   onClick={() => handleDelete(s.staffID)}
