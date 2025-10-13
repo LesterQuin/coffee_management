@@ -21,19 +21,19 @@ const ReportsModel = {
     }
 
     const query = `
-      SELECT 
+    SELECT 
         c.chapelID,
         c.chapelName,
         p.productName,
         SUM(oi.quantity) AS totalOrders
-      FROM sg.LQ_CSS_fnb_order_items oi
-      JOIN sg.LQ_CSS_fnb_orders o ON oi.orderID = o.orderID
-      JOIN sg.LQ_CSS_client_info ci ON o.clientID = ci.clientID
-      JOIN sg.LQ_CSS_chapel_rooms c ON ci.chapelID = c.chapelID
-      JOIN sg.LQ_CSS_fnb_products p ON oi.productID = p.productID
-      WHERE 1=1 ${whereClause}
-      GROUP BY c.chapelID, c.chapelName, p.productName
-      ORDER BY c.chapelName, totalOrders DESC;
+    FROM sg.LQ_CSS_chapel_rooms c
+    LEFT JOIN sg.LQ_CSS_client_info ci ON ci.chapelID = c.chapelID
+    LEFT JOIN sg.LQ_CSS_fnb_orders o ON o.clientID = ci.clientID
+    LEFT JOIN sg.LQ_CSS_fnb_order_items oi ON oi.orderID = o.orderID
+    LEFT JOIN sg.LQ_CSS_fnb_products p ON oi.productID = p.productID
+    WHERE 1=1 ${whereClause}
+    GROUP BY c.chapelID, c.chapelName, p.productName
+    ORDER BY c.chapelName, totalOrders DESC;
     `;
 
     const result = await request.query(query);

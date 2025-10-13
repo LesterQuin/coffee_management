@@ -6,40 +6,50 @@ import { useAuth } from "../context/auth_context";
 export default function Dashboard() {
   const { user } = useAuth();
   const [staffList, setStaffList] = useState([]);
+  const [chapelList, setChapelList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const fetchStaff = async () => {
-      try {
-        const res = await axios.get("http://localhost:5000/api/staff");
-        console.log("Staff API response:", res.data);
-        setStaffList(res.data.data); // ✅ use .data from your API response
-      } catch (err) {
-        console.error("Error fetching staff:", err);
-        setError("Failed to load staff data");
-      } finally {
-        setLoading(false);
-      }
-    };
+    const fetchDashboardData = async () => {
+  setLoading(true);
+  setError("");
+  try {
+    // Staff API (if protected)
+    const staffRes = await axios.get("http://localhost:5000/api/staff", {
+      headers: { Authorization: `Bearer ${token}` }, // <-- add token
+    });
+    setStaffList(staffRes.data.data || []);
 
-    fetchStaff();
+    // Chapels API
+    const chapelsRes = await axios.get("http://localhost:5000/api/chapel/available", {
+      headers: { Authorization: `Bearer ${token}` }, // <-- add token
+    });
+    setChapelList(chapelsRes.data.data || []);
+  } catch (err) {
+    console.error("Error fetching dashboard data:", err);
+    setError("Failed to load dashboard data");
+  } finally {
+    setLoading(false);
+  }
+};
+
+    fetchDashboardData();
   }, []);
 
-  if (loading) return <div className="p-6 text-gray-500">Loading staff data...</div>;
+  if (loading) return <div className="p-6 text-gray-500">Loading dashboard...</div>;
   if (error) return <div className="p-6 text-red-500">{error}</div>;
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold text-blue-600 mb-4">LQ Admin Dashboard</h1>
-      <p className="text-gray-600 mb-6">
-        Welcome, <span className="font-semibold">{user?.email || "Admin"}</span>! Here’s an overview of the system.
+    <div className="p-6 space-y-6">
+      <h1 className="text-2xl font-bold text-blue-600">LQ Admin Dashboard</h1>
+      <p className="text-gray-600">
+        Welcome, <span className="font-semibold">{user?.email || "Admin"}</span>!
       </p>
 
-      {/* Staff Table */}
+      {/* Staff Overview */}
       <div className="bg-white shadow rounded-lg p-4">
         <h2 className="text-lg font-semibold mb-2">Staff Overview</h2>
-
         {staffList.length === 0 ? (
           <p className="text-gray-500 text-center py-4">No staff found</p>
         ) : (
@@ -67,6 +77,22 @@ export default function Dashboard() {
               ))}
             </tbody>
           </table>
+        )}
+      </div>
+
+      {/* Chapels Overview */}
+      <div className="bg-white shadow rounded-lg p-4">
+        <h2 className="text-lg font-semibold mb-2">Chapels Overview</h2>
+        {chapelList.length === 0 ? (
+          <p className="text-gray-500 text-center py-4">No chapels found</p>
+        ) : (
+          <ul className="space-y-1">
+            {chapelList.map((chapel) => (
+              <li key={chapel.chapelID} className="border-b py-1">
+                <span className="font-semibold">{chapel.chapelName}</span> — Status: {chapel.status}
+              </li>
+            ))}
+          </ul>
         )}
       </div>
     </div>
