@@ -8,16 +8,28 @@ const router = express.Router();
 router.get("/categories", staffAuth, Controller.listCategories);
 // Create a new category
 router.post("/categories", staffAuth, Controller.createCategory);
+// Update category
+router.put("/categories/:categoryID", staffAuth, Controller.updateCategory);
+// Delete category
+router.delete("/categories/:categoryID", staffAuth, Controller.deleteCategory);
 
 // Get all products
 router.get("/products", staffAuth, Controller.listProducts);
 // Create a new product
 router.post("/products", staffAuth, Controller.createProduct);
+// Update product
+router.put("/products/:productID", staffAuth, Controller.updateProduct);
+// Delete product
+router.delete("/products/:productID", staffAuth, Controller.deleteProduct);
 
 // Get all packages
 router.get("/packages", staffAuth, Controller.listPackages);
 // Create a new package
 router.post("/packages", staffAuth, Controller.createPackage);
+// Update package
+router.put("/packages/:packageID", staffAuth, Controller.updatePackage);
+// Delete package
+router.delete("/packages/:packageID", staffAuth, Controller.deletePackage);
 
 // Get all items under a specific package
 router.get("/packages/:packageID/items", staffAuth, Controller.listPackageItems);

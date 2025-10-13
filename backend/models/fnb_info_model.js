@@ -1,3 +1,4 @@
+//import mssql from "mssql";
 import { poolPromise, sql } from "../config/db_config.js";
 
 // Categories
@@ -18,6 +19,28 @@ export const createCategory = async (category) => {
     .input("image", sql.NVarChar(255), category.image ?? null)
     .query("INSERT INTO sg.LQ_CSS_fnb_categories (categoryName, description, image) VALUES (@categoryName,@description,@image)");
   return true;
+};
+// Update a category
+export const updateCategory = async (categoryID, category) => {
+  const pool = await poolPromise;
+  await pool.request()
+  .input("categoryID", sql.Int, categoryID)
+  .input("categoryName", sql.NVarChar(100), category.categoryName)
+  .input("description", sql.NVarChar(255), category.description ?? null)
+  .input("image", sql.NVarChar(255), category.image ?? null)
+  .query(`
+    UPDATE sg.LQ_CSS_fnb_categories
+    SET categoryName=@categoryName, description=@description, image=@image
+    WHERE categoryID=@categoryID
+    `);
+  return true;
+};
+// Delete a category
+export const deleteCategory = async (categoryID) => {
+  const pool = await poolPromise;
+  await pool.request()
+    .input("categoryID", sql.Int, categoryID)
+    .query("DELETE FROM sg.LQ_CSS_fnb_categories WHERE categoryID=@categoryID");
 };
 
 // Products
@@ -50,6 +73,31 @@ export const createProduct = async (product) => {
     `);
   return true;
 };
+// update a product
+export const updateProduct = async (productID, product) => {
+  const pool = await poolPromise;
+  await pool.request()
+    .input("productID", sql.Int, productID)
+    .input("categoryID", sql.Int, product.categoryID)
+    .input("productName", sql.NVarChar(150), product.productName)
+    .input("description", sql.NVarChar(255), product.description ?? null)
+    .input("price", sql.Decimal(18,2), product.price)
+    .input("size", sql.NVarChar(50), product.size ?? null)
+    .input("image", sql.NVarChar(255), product.image ?? null)
+    .query(`
+      UPDATE sg.LQ_CSS_fnb_products
+      SET categoryID=@categoryID, productName=@productName, description=@description,
+          price=@price, size=@size, image=@image, isAvailable=@isAvailable
+      WHERE productID=@productID
+  `);
+};
+// delete a product
+export const deleteProduct = async (productID) => {
+  const pool = await poolPromise;
+  await pool.request()
+    .input("productID", sql.Int, productID)
+    .query("DELETE FROM sg.LQ_CSS_fnb_products WHERE productID=@productID");
+};
 
 // Packages
 export const getAllPackages = async () => {
@@ -57,7 +105,6 @@ export const getAllPackages = async () => {
   const res = await pool.request().query("SELECT * FROM sg.LQ_CSS_fnb_packages ORDER BY createdAt DESC");
   return res.recordset;
 };
-
 // Create a new package
 export const createPackage = async (pkg) => {
   const pool = await poolPromise;
@@ -67,6 +114,27 @@ export const createPackage = async (pkg) => {
     .input("totalValue", sql.Decimal(18,2), pkg.totalValue)
     .query("INSERT INTO sg.LQ_CSS_fnb_packages (packageName, description, totalValue) VALUES (@packageName,@description,@totalValue)");
   return true;
+};
+// Update a package
+export const updatePackage = async (packageID, pkg) => {
+  const pool = await poolPromise;
+  await pool.request()
+    .input("packageID", sql.Int, packageID)
+    .input("packageName", sql.NVarChar(100), pkg.packageName)
+    .input("description", sql.NVarChar(255), pkg.description ?? null)
+    .input("totalValue", sql.Decimal(18,2), pkg.totalValue)
+    .query(`
+      UPDATE sg.LQ_CSS_fnb_packages
+      SET packageName=@packageName, description=@description, totalValue=@totalValue
+      WHERE packageID=@packageID
+  `);
+};
+// Delete a package
+export const deletePackage = async (packageID) => {
+  const pool = await poolPromise;
+  await pool.request()
+    .input("packageID", sql.Int, packageID)
+    .query("DELETE FROM sg.LQ_CSS_fnb_packages WHERE packageID=@packageID");
 };
 
 // Package Items

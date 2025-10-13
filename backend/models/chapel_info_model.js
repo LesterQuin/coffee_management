@@ -46,7 +46,6 @@ export const setChapelStatus = async (chapelID, status) => {
 };
 
 // Delete
-
 export const deleteChapel = async (chapelID) => {
   const pool = await poolPromise;
   const res = await pool.request()

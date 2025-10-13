@@ -4,406 +4,290 @@ import { useAuth } from "../context/auth_context";
 
 export default function Fnb() {
   const { token } = useAuth();
+
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
   const [packages, setPackages] = useState([]);
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [packageItems, setPackageItems] = useState([]);
-  const [form, setForm] = useState({
-    categoryName: "",
-    description: "",
-    productName: "",
-    price: "",
-    size: "",
-    image: "",
-    categoryID: "",
-    packageName: "",
-    totalValue: "",
-    packageProduct: "",
-    quantity: "",
-  });
 
-  // Load all F&B data
+  // Forms
+  const [categoryForm, setCategoryForm] = useState({ categoryName: "", description: "" });
+  const [productForm, setProductForm] = useState({ categoryID: "", productName: "", price: "", size: "" });
+  const [packageForm, setPackageForm] = useState({ packageName: "", totalValue: "" });
+  const [packageItemForm, setPackageItemForm] = useState({ productID: "", quantity: "" });
+
+  // Editing states
+  const [editingCategory, setEditingCategory] = useState(null);
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [editingPackage, setEditingPackage] = useState(null);
+
+  // ----------------- Load Data -----------------
   const loadData = async () => {
     try {
       const [catRes, prodRes, pkgRes] = await Promise.all([
-        axios.get("http://localhost:5000/api/fnb/categories", {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        axios.get("http://localhost:5000/api/fnb/products", {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        axios.get("http://localhost:5000/api/fnb/packages", {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
+        axios.get("http://localhost:5000/api/fnb/categories", { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get("http://localhost:5000/api/fnb/products", { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get("http://localhost:5000/api/fnb/packages", { headers: { Authorization: `Bearer ${token}` } }),
       ]);
       setCategories(catRes.data.data || []);
       setProducts(prodRes.data.data || []);
       setPackages(pkgRes.data.data || []);
     } catch (err) {
-      console.error("Error loading F&B data", err);
+      console.error("Error loading F&B data", err.response?.data || err.message);
     }
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
-  // Category creation
+  // ----------------- Category CRUD -----------------
   const createCategory = async () => {
-    if (!form.categoryName) return alert("Enter category name");
-    await axios.post(
-      "http://localhost:5000/api/fnb/categories",
-      {
-        categoryName: form.categoryName,
-        description: form.description,
-      },
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    setForm({ ...form, categoryName: "", description: "" });
+    if (!categoryForm.categoryName) return alert("Enter category name");
+    await axios.post("http://localhost:5000/api/fnb/categories", categoryForm, { headers: { Authorization: `Bearer ${token}` } });
+    setCategoryForm({ categoryName: "", description: "" });
     loadData();
   };
 
-  // Product creation
+  const updateCategory = async (categoryID) => {
+    await axios.put(`http://localhost:5000/api/fnb/categories/${categoryID}`, editingCategory, { headers: { Authorization: `Bearer ${token}` } });
+    setEditingCategory(null);
+    loadData();
+  };
+
+  const deleteCategory = async (categoryID) => {
+    if (!window.confirm("Delete this category?")) return;
+    await axios.delete(`http://localhost:5000/api/fnb/categories/${categoryID}`, { headers: { Authorization: `Bearer ${token}` } });
+    loadData();
+  };
+
+  // ----------------- Product CRUD -----------------
   const createProduct = async () => {
-    if (!form.productName || !form.price || !form.categoryID)
-      return alert("Enter product details");
-
-    const payload = {
-      categoryID: parseInt(form.categoryID),
-      productName: form.productName,
-      price: parseFloat(form.price),
-      description: form.description || "",
-      size: form.size || null,
-      image: form.image || null,
-      isAvailable: true,
-    };
-
-    await axios.post("http://localhost:5000/api/fnb/products", payload, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    setForm({
-      ...form,
-      productName: "",
-      price: "",
-      image: "",
-      size: "",
-    });
+    if (!productForm.productName || !productForm.price || !productForm.categoryID) return alert("Fill all product fields");
+    const payload = { ...productForm, categoryID: parseInt(productForm.categoryID), price: parseFloat(productForm.price), isAvailable: true };
+    await axios.post("http://localhost:5000/api/fnb/products", payload, { headers: { Authorization: `Bearer ${token}` } });
+    setProductForm({ categoryID: "", productName: "", price: "", size: "" });
     loadData();
   };
 
-  // Package creation
+  const updateProduct = async (productID) => {
+    await axios.put(`http://localhost:5000/api/fnb/products/${productID}`, editingProduct, { headers: { Authorization: `Bearer ${token}` } });
+    setEditingProduct(null);
+    loadData();
+  };
+
+  const deleteProduct = async (productID) => {
+    if (!window.confirm("Delete this product?")) return;
+    await axios.delete(`http://localhost:5000/api/fnb/products/${productID}`, { headers: { Authorization: `Bearer ${token}` } });
+    loadData();
+  };
+
+  // ----------------- Package CRUD -----------------
   const createPackage = async () => {
-    if (!form.packageName || !form.totalValue)
-      return alert("Enter package details");
-    await axios.post(
-      "http://localhost:5000/api/fnb/packages",
-      {
-        packageName: form.packageName,
-        description: form.description || "",
-        totalValue: parseFloat(form.totalValue),
-      },
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    setForm({ ...form, packageName: "", totalValue: "" });
+    if (!packageForm.packageName || !packageForm.totalValue) return alert("Fill all package fields");
+    await axios.post("http://localhost:5000/api/fnb/packages", { ...packageForm, totalValue: parseFloat(packageForm.totalValue) }, { headers: { Authorization: `Bearer ${token}` } });
+    setPackageForm({ packageName: "", totalValue: "" });
     loadData();
   };
 
-  // Load package items
+  const updatePackage = async (packageID) => {
+    await axios.put(`http://localhost:5000/api/fnb/packages/${packageID}`, editingPackage, { headers: { Authorization: `Bearer ${token}` } });
+    setEditingPackage(null);
+    loadData();
+  };
+
+  const deletePackage = async (packageID) => {
+    if (!window.confirm("Delete this package?")) return;
+    await axios.delete(`http://localhost:5000/api/fnb/packages/${packageID}`, { headers: { Authorization: `Bearer ${token}` } });
+    loadData();
+  };
+
+  // ----------------- Package Items -----------------
   const viewPackageItems = async (pkg) => {
-  setSelectedPackage(pkg);
-  try {
-    const res = await axios.get(
-      `http://localhost:5000/api/fnb/packages/${pkg.packageID}/items`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
+    setSelectedPackage(pkg);
+    const res = await axios.get(`http://localhost:5000/api/fnb/packages/${pkg.packageID}/items`, { headers: { Authorization: `Bearer ${token}` } });
     setPackageItems(res.data.data || []);
-  } catch (err) {
-    console.error("Error fetching package items", err.response?.data || err.message);
-    setPackageItems([]);
-  }
-};
+  };
 
-  // Add product to package
   const addProductToPackage = async () => {
-    if (!selectedPackage) return alert("Select a package first");
-    if (!form.packageProduct || !form.quantity)
-      return alert("Select product and quantity");
-
-    await axios.post(
-      `http://localhost:5000/api/fnb/packages/${selectedPackage.packageID}/items`,
-      {
-        productID: parseInt(form.packageProduct),
-        quantity: parseInt(form.quantity),
-      },
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-
-    // Clear form & reload items
-    setForm({ ...form, packageProduct: "", quantity: "" });
+    if (!selectedPackage || !packageItemForm.productID || !packageItemForm.quantity) return alert("Select product and quantity");
+    await axios.post(`http://localhost:5000/api/fnb/packages/${selectedPackage.packageID}/items`, {
+      productID: parseInt(packageItemForm.productID),
+      quantity: parseInt(packageItemForm.quantity)
+    }, { headers: { Authorization: `Bearer ${token}` } });
+    setPackageItemForm({ productID: "", quantity: "" });
     viewPackageItems(selectedPackage);
   };
 
-  // Remove product from package
   const removeItemFromPackage = async (item) => {
-    if (
-      !window.confirm(
-        `Remove ${item.productName} (x${item.quantity}) from ${selectedPackage.packageName}?`
-      )
-    )
-      return;
-    await axios.delete(
-      `http://localhost:5000/api/fnb/packages/${selectedPackage.packageID}/items/${item.packageItemID}`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
+    if (!window.confirm(`Remove ${item.productName} from ${selectedPackage.packageName}?`)) return;
+    await axios.delete(`http://localhost:5000/api/fnb/packages/${selectedPackage.packageID}/items/${item.packageItemID}`, { headers: { Authorization: `Bearer ${token}` } });
     viewPackageItems(selectedPackage);
   };
 
+  // ----------------- JSX -----------------
   return (
     <div className="p-6 space-y-10">
       <h1 className="text-2xl font-semibold">🍴 F&B Management</h1>
 
-      {/* CATEGORIES */}
+      {/* Categories */}
       <section className="bg-white p-4 rounded shadow">
-        <h2 className="text-xl mb-3 font-semibold">1️⃣ Categories</h2>
-        <div className="flex flex-wrap gap-2 mb-3">
-          <input
-            type="text"
-            placeholder="Category Name"
-            value={form.categoryName}
-            onChange={(e) => setForm({ ...form, categoryName: e.target.value })}
-            className="border p-2 rounded"
-          />
-          <input
-            type="text"
-            placeholder="Description"
-            value={form.description}
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
-            className="border p-2 rounded"
-          />
-          <button
-            onClick={createCategory}
-            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-          >
-            Add Category
-          </button>
+        <h2 className="text-xl mb-3 font-semibold">Categories</h2>
+        <div className="flex gap-2 mb-3">
+          <input placeholder="Name" value={categoryForm.categoryName} onChange={e => setCategoryForm({ ...categoryForm, categoryName: e.target.value })} className="border p-2 rounded" />
+          <input placeholder="Description" value={categoryForm.description} onChange={e => setCategoryForm({ ...categoryForm, description: e.target.value })} className="border p-2 rounded" />
+          <button onClick={createCategory} className="bg-blue-600 text-white px-4 py-2 rounded">Add</button>
         </div>
         <ul className="list-disc ml-6">
-          {categories.map((c) => (
-            <li key={c.categoryID}>{c.categoryName}</li>
+          {categories.map(c => (
+            <li key={c.categoryID} className="flex items-center gap-2">
+              {editingCategory?.categoryID === c.categoryID ? (
+                <>
+                  <input value={editingCategory.categoryName} onChange={e => setEditingCategory({ ...editingCategory, categoryName: e.target.value })} className="border p-1" />
+                  <button onClick={() => updateCategory(c.categoryID)} className="text-green-600">Save</button>
+                  <button onClick={() => setEditingCategory(null)} className="text-gray-500">Cancel</button>
+                </>
+              ) : (
+                <>
+                  {c.categoryName}
+                  <button onClick={() => setEditingCategory(c)} className="text-blue-500">Edit</button>
+                  <button onClick={() => deleteCategory(c.categoryID)} className="text-red-500">Delete</button>
+                </>
+              )}
+            </li>
           ))}
         </ul>
       </section>
 
-      {/* PRODUCTS */}
+      {/* Products */}
       <section className="bg-white p-5 rounded-xl shadow-md">
-        <h2 className="text-xl font-semibold">2️⃣ Products</h2>
-
-        <div className="flex flex-wrap gap-2 mb-3">
-          <select
-            value={form.categoryID || ""}
-            onChange={(e) => setForm({ ...form, categoryID: e.target.value })}
-            className="border p-2 rounded w-48"
-          >
+        <h2 className="text-xl font-semibold">Products</h2>
+        <div className="flex gap-2 mb-3 flex-wrap">
+          <select value={productForm.categoryID} onChange={e => setProductForm({ ...productForm, categoryID: e.target.value })} className="border p-2 rounded w-48">
             <option value="">Select Category</option>
-            {categories.map((c) => (
-              <option key={c.categoryID} value={c.categoryID}>
-                {c.categoryName}
-              </option>
-            ))}
+            {categories.map(c => <option key={c.categoryID} value={c.categoryID}>{c.categoryName}</option>)}
           </select>
-          <input
-            type="text"
-            placeholder="Product Name"
-            value={form.productName}
-            onChange={(e) => setForm({ ...form, productName: e.target.value })}
-            className="border p-2 rounded"
-          />
-          <input
-            type="number"
-            placeholder="Price"
-            value={form.price}
-            onChange={(e) => setForm({ ...form, price: e.target.value })}
-            className="border p-2 rounded"
-          />
-          <select
-            value={form.size || ""}
-            onChange={(e) => setForm({ ...form, size: e.target.value })}
-            className="border p-2 rounded w-32"
-          >
-            <option value="">Select Size</option>
+          <input placeholder="Product Name" value={productForm.productName} onChange={e => setProductForm({ ...productForm, productName: e.target.value })} className="border p-2 rounded" />
+          <input placeholder="Price" type="number" value={productForm.price} onChange={e => setProductForm({ ...productForm, price: e.target.value })} className="border p-2 rounded w-24" />
+          <select value={productForm.size} onChange={e => setProductForm({ ...productForm, size: e.target.value })} className="border p-2 rounded w-24">
+            <option value="">Size</option>
             <option value="8oz">8oz</option>
             <option value="12oz">12oz</option>
             <option value="16oz">16oz</option>
           </select>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => {
-              const file = e.target.files[0];
-              if (file) {
-                const reader = new FileReader();
-                reader.onloadend = () => {
-                  setForm({ ...form, image: reader.result });
-                };
-                reader.readAsDataURL(file);
-              }
-            }}
-            className="border p-2 rounded w-60"
-          />
-          <button
-            onClick={createProduct}
-            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-          >
-            Add Product
-          </button>
+          <button onClick={createProduct} className="bg-green-600 text-white px-4 py-2 rounded">Add</button>
         </div>
-
         <table className="w-full text-sm border rounded">
           <thead className="bg-gray-100">
             <tr>
-              <th className="p-2 text-left">Image</th>
-              <th className="p-2 text-left">Product</th>
-              <th className="p-2 text-left">Category</th>
-              <th className="p-2 text-left">Size</th>
-              <th className="p-2 text-left">Price</th>
+              <th>Product</th>
+              <th>Category</th>
+              <th>Size</th>
+              <th>Price</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {products.map((p) => (
-              <tr key={p.productID} className="border-t">
-                <td className="p-2">
-                  {p.image ? (
-                    <img
-                      src={p.image}
-                      alt={p.productName}
-                      className="w-16 h-16 object-cover"
-                    />
-                  ) : (
-                    <span className="text-gray-400">No Image</span>
-                  )}
-                </td>
-                <td className="p-2">{p.productName}</td>
-                <td className="p-2">{p.categoryName}</td>
-                <td className="p-2">{p.size}</td>
-                <td className="p-2">₱{p.price}</td>
+            {products.map(p => (
+              <tr key={p.productID}>
+                {editingProduct?.productID === p.productID ? (
+                  <>
+                    <td><input value={editingProduct.productName} onChange={e => setEditingProduct({ ...editingProduct, productName: e.target.value })} className="border p-1" /></td>
+                    <td>{p.categoryName}</td>
+                    <td>
+                      <select value={editingProduct.size} onChange={e => setEditingProduct({ ...editingProduct, size: e.target.value })} className="border p-1 w-24">
+                        <option value="">Select Size</option>
+                        <option value="8oz">8oz</option>
+                        <option value="12oz">12oz</option>
+                        <option value="16oz">16oz</option>
+                      </select>
+                    </td>
+                    <td><input type="number" value={editingProduct.price} onChange={e => setEditingProduct({ ...editingProduct, price: e.target.value })} className="border p-1 w-20" /></td>
+                    <td>
+                      <button onClick={() => updateProduct(p.productID)} className="text-green-600">Save</button>
+                      <button onClick={() => setEditingProduct(null)} className="text-gray-500">Cancel</button>
+                    </td>
+                  </>
+                ) : (
+                  <>
+                    <td>{p.productName}</td>
+                    <td>{p.categoryName}</td>
+                    <td>{p.size || "-"}</td>
+                    <td>₱{p.price}</td>
+                    <td>
+                      <button onClick={() => setEditingProduct(p)} className="text-blue-500 mr-2">Edit</button>
+                      <button onClick={() => deleteProduct(p.productID)} className="text-red-500">Delete</button>
+                    </td>
+                  </>
+                )}
               </tr>
             ))}
           </tbody>
         </table>
       </section>
 
-      {/* PACKAGES */}
+      {/* Packages & Package Items */}
       <section className="bg-white p-4 rounded shadow">
-        <h2 className="text-xl mb-3 font-semibold">3️⃣ Packages</h2>
-        <div className="flex flex-wrap gap-2 mb-3">
-          <input
-            type="text"
-            placeholder="Package Name"
-            value={form.packageName}
-            onChange={(e) => setForm({ ...form, packageName: e.target.value })}
-            className="border p-2 rounded"
-          />
-          <input
-            type="number"
-            placeholder="Total Value"
-            value={form.totalValue}
-            onChange={(e) => setForm({ ...form, totalValue: e.target.value })}
-            className="border p-2 rounded"
-          />
-          <button
-            onClick={createPackage}
-            className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
-          >
-            Add Package
-          </button>
+        <h2 className="text-xl font-semibold">Packages</h2>
+        <div className="flex gap-2 mb-3">
+          <input placeholder="Package Name" value={packageForm.packageName} onChange={e => setPackageForm({ ...packageForm, packageName: e.target.value })} className="border p-2 rounded" />
+          <input placeholder="Total Value" type="number" value={packageForm.totalValue} onChange={e => setPackageForm({ ...packageForm, totalValue: e.target.value })} className="border p-2 rounded w-32" />
+          <button onClick={createPackage} className="bg-purple-600 text-white px-4 py-2 rounded">Add</button>
         </div>
 
-        {packages.map((pkg) => (
-          <div
-            key={pkg.packageID}
-            className="border rounded p-3 mb-3 hover:bg-gray-50 cursor-pointer"
-            onClick={() => viewPackageItems(pkg)}
-          >
-            <div className="flex justify-between items-center">
-              <h3 className="font-semibold text-lg">
-                {pkg.packageName} - ₱{pkg.totalValue}
-              </h3>
-            </div>
-
-            {selectedPackage?.packageID === pkg.packageID && (
-              <div className="mt-3">
-                <div className="flex gap-2 mb-3">
-                  <select
-                    value={form.packageProduct || ""}
-                    onChange={(e) =>
-                      setForm({ ...form, packageProduct: e.target.value })
-                    }
-                    className="border p-2 rounded w-60"
-                  >
-                    <option value="">Select a product</option>
-                    {products.map((p) => (
-                      <option key={p.productID} value={p.productID}>
-                        {p.productName}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    placeholder="Qty"
-                    value={form.quantity}
-                    onChange={(e) =>
-                      setForm({ ...form, quantity: e.target.value })
-                    }
-                    className="border p-2 rounded w-24"
-                  />
-                  <button
-                    onClick={addProductToPackage}
-                    className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700"
-                  >
-                    ➕ Add Product
-                  </button>
+        {packages.map(pkg => (
+          <div key={pkg.packageID} className="border rounded p-3 mb-3 hover:bg-gray-50">
+            {editingPackage?.packageID === pkg.packageID ? (
+              <div className="flex gap-2">
+                <input value={editingPackage.packageName} onChange={e => setEditingPackage({ ...editingPackage, packageName: e.target.value })} className="border p-1" />
+                <input type="number" value={editingPackage.totalValue} onChange={e => setEditingPackage({ ...editingPackage, totalValue: e.target.value })} className="border p-1 w-24" />
+                <button onClick={() => updatePackage(pkg.packageID)} className="text-green-600">Save</button>
+                <button onClick={() => setEditingPackage(null)} className="text-gray-500">Cancel</button>
+              </div>
+            ) : (
+              <div className="flex justify-between items-center">
+                <h3 className="font-semibold text-lg">{pkg.packageName} - ₱{pkg.totalValue}</h3>
+                <div>
+                  <button onClick={() => setEditingPackage(pkg)} className="text-blue-500 mr-2">Edit</button>
+                  <button onClick={() => deletePackage(pkg.packageID)} className="text-red-500">Delete</button>
                 </div>
-
-                <table className="w-full text-sm border rounded">
-                  <thead className="bg-gray-100">
-                    <tr>
-                      <th className="p-2 text-left">Product</th>
-                      <th className="p-2 text-left">Quantity</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {packageItems.length > 0 ? (
-                      packageItems.map((item) => (
-                        <tr key={item.packageItemID} className="border-t">
-                          <td className="p-2">{item.productName}</td>
-                          <td className="p-2">{item.quantity}</td>
-                          <td className="p-2 text-right">
-                            <button
-                              onClick={() => removeItemFromPackage(item)}
-                              className="text-red-500 hover:underline"
-                            >
-                              Remove
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td
-                          colSpan="3"
-                          className="text-center p-3 text-gray-400"
-                        >
-                          No items yet.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
               </div>
             )}
+
+            {/* Package Items */}
+            <div className="mt-3">
+              <button onClick={() => viewPackageItems(pkg)} className="text-indigo-600 underline mb-2">View Items</button>
+              {selectedPackage?.packageID === pkg.packageID && (
+                <>
+                  <div className="flex gap-2 mb-2">
+                    <select value={packageItemForm.productID} onChange={e => setPackageItemForm({ ...packageItemForm, productID: e.target.value })} className="border p-1 rounded w-48">
+                      <option value="">Select Product</option>
+                      {products.map(p => <option key={p.productID} value={p.productID}>{p.productName}</option>)}
+                    </select>
+                    <input type="number" value={packageItemForm.quantity} onChange={e => setPackageItemForm({ ...packageItemForm, quantity: e.target.value })} className="border p-1 w-24" />
+                    <button onClick={addProductToPackage} className="bg-indigo-600 text-white px-2 rounded">Add</button>
+                  </div>
+
+                  <table className="w-full text-sm border rounded">
+                    <thead className="bg-gray-100">
+                      <tr><th>Product</th><th>Qty</th><th>Actions</th></tr>
+                    </thead>
+                    <tbody>
+                      {packageItems.length > 0 ? packageItems.map(item => (
+                        <tr key={item.packageItemID}>
+                          <td>{item.productName}</td>
+                          <td>{item.quantity}</td>
+                          <td>
+                            <button onClick={() => removeItemFromPackage(item)} className="text-red-500">Remove</button>
+                          </td>
+                        </tr>
+                      )) : (
+                        <tr><td colSpan="3" className="text-center p-2 text-gray-400">No items yet</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </>
+              )}
+            </div>
           </div>
         ))}
       </section>

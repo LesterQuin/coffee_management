@@ -19,6 +19,26 @@ export const createCategory = async (req, res) => {
     return error(res, e.message);
   }
 };
+// Update a category
+export const updateCategory = async (req, res) => {
+  try {
+    const { categoryID } = req.params;
+    await Model.updateCategory(categoryID, req.body);
+    return success (res, null, "Category updated succesfully");
+  } catch (e){
+    return error(res, e.message);
+  }
+};
+// Delete a category
+export const deleteCategory = async (req, res) => {
+  try {
+    const { categoryID } = req.params;
+    await Model.deleteCategory(categoryID);
+    return success(res, null, "Category deleted successfully");
+  } catch (e) {
+    return error(res, e.message);
+  }
+};
 
 // Products
 export const listProducts = async (req, res) => {
@@ -36,6 +56,26 @@ export const createProduct = async (req, res) => {
     await Model.createProduct(product);
     return success(res, null, "Product created");
   } catch (e) {
+    return error(res, e.message);
+  }
+};
+// Update a product
+export const updateProduct = async (req, res) => {
+  try{
+    const { productID } = req.params;
+    await Model.updateProduct(productID, req.body);
+    return success(res, null, "Product updated successfully");
+  } catch (e) {
+    return error(res, e.message);
+  }
+};
+// Delete a product
+export const deleteProduct = async (req, res) => {
+  try{
+    const { productID } = req.params;
+    await Model.deleteProduct(productID);
+    return success(res, null, "Product deleted succesfully");
+  } catch (e){
     return error(res, e.message);
   }
 };
@@ -58,6 +98,27 @@ export const createPackage = async (req, res) => {
     return error(res, e.message);
   }
 };
+// Update a package
+export const updatePackage = async (req, res) => {
+  try {
+    const { packageID } = req.params;
+    await Model.updatePackage(packageID, req.body);
+    return success(res, null, "Package updated succesfully");
+  }catch (e) {
+    return error(res, e.message);
+  }
+};
+// Delete a package
+export const deletePackage = async (req, res) => {
+  try {
+    const { packageID } = req.params;
+    await Model.deletePackage(packageID);
+    return success(res, null, "Package deleted succesfully");
+  } catch (e) {
+    return error(res, e.message);
+  }
+};
+
 // List items in a package
 export const listPackageItems = async (req, res) => {
   try {
