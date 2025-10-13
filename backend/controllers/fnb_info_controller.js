@@ -123,11 +123,10 @@ export const deletePackage = async (req, res) => {
 export const listPackageItems = async (req, res) => {
   try {
     const { packageID } = req.params;
-    console.log("📦 Fetching items for packageID:", packageID);
-    const data = await Model.getPackageItems(packageID);
-    return success(res, data, "Package items fetched successfully");
+    const { items, remainingValue } = await Model.getPackageItems(packageID);
+    return success(res, { items, remainingValue }, "Package items fetched successfully");
   } catch (e) {
-    console.error("❌ Error in listPackageItems:", e);
+    console.error("❌ Error in listPackageItems:", e); // ← log full error
     return error(res, e.message);
   }
 };
@@ -137,10 +136,18 @@ export const addPackageItem = async (req, res) => {
   try {
     const { packageID } = req.params;
     const { productID, quantity } = req.body;
+
+    // Validate if we can add this item
+    const allowed = await Model.canAddPackageItem(packageID, productID, quantity);
+    if (!allowed) {
+      return error(res, "Cannot add item: exceeds package total value");
+    }
+
     await Model.addPackageItem(packageID, productID, quantity);
     return success(res, null, "Package item added");
   } catch (e) {
-    return error(res, e.message);
+    console.error("❌ Error in addPackageItem:", e);
+    return error(res, e.message || "Failed to add package item");
   }
 };
 
@@ -154,3 +161,4 @@ export const deletePackageItem = async (req, res) => {
     return error(res, e.message);
   }
 };
+

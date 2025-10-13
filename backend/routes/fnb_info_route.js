@@ -40,4 +40,8 @@ router.post("/packages/:packageID/items", staffAuth, Controller.addPackageItem);
 // Delete a specific item from a specific package
 router.delete("/packages/:packageID/items/:itemId", staffAuth, Controller.deletePackageItem);
 
+// Get ID package
+router.post("/packages/:packageID/items", Controller.addPackageItem);
+
+
 export default router;

@@ -1,7 +1,7 @@
 //import mssql from "mssql";
 import { poolPromise, sql } from "../config/db_config.js";
 
-// Categories
+//-------------------- Categories --------------------
 export const getAllCategories = async () => {
   const pool = await poolPromise;
   const res = await pool.request().query(
@@ -43,7 +43,7 @@ export const deleteCategory = async (categoryID) => {
     .query("DELETE FROM sg.LQ_CSS_fnb_categories WHERE categoryID=@categoryID");
 };
 
-// Products
+// -------------------- Products --------------------
 export const getAllProducts = async () => {
   const pool = await poolPromise;
   const res = await pool.request().query(`
@@ -99,12 +99,22 @@ export const deleteProduct = async (productID) => {
     .query("DELETE FROM sg.LQ_CSS_fnb_products WHERE productID=@productID");
 };
 
-// Packages
+// -------------------- Packages --------------------
 export const getAllPackages = async () => {
   const pool = await poolPromise;
-  const res = await pool.request().query("SELECT * FROM sg.LQ_CSS_fnb_packages ORDER BY createdAt DESC");
+  const res = await pool.request()
+    .query("SELECT * FROM sg.LQ_CSS_fnb_packages ORDER BY createdAt DESC");
   return res.recordset;
 };
+// get package ID
+export const getPackageByID = async (packageID) => {
+  const pool = await poolPromise;
+  const res = await pool.request()
+    .input("packageID", sql.Int, packageID)
+    .query("SELECT * FROM sg.LQ_CSS_fnb_packages WHERE packageID=@packageID");
+  return res.recordset[0];
+};
+
 // Create a new package
 export const createPackage = async (pkg) => {
   const pool = await poolPromise;
@@ -137,7 +147,45 @@ export const deletePackage = async (packageID) => {
     .query("DELETE FROM sg.LQ_CSS_fnb_packages WHERE packageID=@packageID");
 };
 
-// Package Items
+// -------------------- Package Items --------------------
+// Get items in a package
+export const getPackageItems = async (packageID) => {
+  const pool = await poolPromise;
+
+  // Get package items with product prices
+  const res = await pool.request()
+    .input("packageID", sql.Int, packageID)
+    .query(`
+      SELECT i.packageItemID, i.packageID, i.productID, p.productName, p.price, i.quantity
+      FROM [DHUB].[sg].[LQ_CSS_fnb_package_items] i
+      INNER JOIN [DHUB].[sg].[LQ_CSS_fnb_products] p
+        ON i.productID = p.productID
+      WHERE i.packageID = @packageID
+    `);
+
+  const items = res.recordset || [];
+
+  // Get totalValue of the package
+  const pkgRes = await pool.request()
+    .input("packageID", sql.Int, packageID)
+    .query(`SELECT totalValue FROM sg.LQ_CSS_fnb_packages WHERE packageID = @packageID`);
+
+  if (!pkgRes.recordset.length) {
+    // Package not found — return empty items and zero remaining
+    return { items: [], remainingValue: 0 };
+  }
+
+  const totalValue = pkgRes.recordset[0].totalValue;
+
+  // Calculate total value of items in package
+  const totalUsed = items.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+  const remainingValue = totalValue - totalUsed;
+
+  return { items, remainingValue };
+};
+
+
+// Create Package item
 export const addPackageItem = async (packageID, productID, quantity) => {
   const pool = await poolPromise;
   await pool.request()
@@ -151,22 +199,6 @@ export const addPackageItem = async (packageID, productID, quantity) => {
     `);
 };
 
-
-// Get items in a package
-export const getPackageItems = async (packageID) => {
-  const pool = await poolPromise;
-  const res = await pool.request()
-    .input("packageID", sql.Int, packageID)
-    .query(`
-      SELECT i.packageItemID, i.packageID, i.productID, p.productName, p.price, i.quantity
-      FROM [DHUB].[sg].[LQ_CSS_fnb_package_items] i
-      INNER JOIN [DHUB].[sg].[LQ_CSS_fnb_products] p
-        ON i.productID = p.productID
-      WHERE i.packageID = @packageID
-    `);
-  return res.recordset;
-};
-
 // Delete item from package
 export const deletePackageItem = async (packageItemID) => {
   const pool = await poolPromise;
@@ -178,3 +210,25 @@ export const deletePackageItem = async (packageItemID) => {
     `);
 };
 
+// -------------------- Validation: check package total --------------------
+export const canAddPackageItem = async (packageID, productID, quantity) => {
+  const pool = await poolPromise;
+
+  const pkg = await getPackageByID(packageID);
+  if (!pkg) throw new Error("Package not found");
+
+  const { items: packageItems } = await getPackageItems(packageID);
+
+  const productRes = await pool.request()
+    .input("productID", sql.Int, productID)
+    .query("SELECT price FROM sg.LQ_CSS_fnb_products WHERE productID=@productID");
+
+  if (productRes.recordset.length === 0) throw new Error("Product not found");
+
+  const productPrice = productRes.recordset[0].price;
+
+  const currentTotal = packageItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const newTotal = currentTotal + (productPrice * quantity);
+
+  return newTotal <= pkg.totalValue;
+};

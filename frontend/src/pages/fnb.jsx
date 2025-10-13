@@ -10,6 +10,7 @@ export default function Fnb() {
   const [packages, setPackages] = useState([]);
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [packageItems, setPackageItems] = useState([]);
+  const [remainingValue, setRemainingValue] = useState(0);
 
   // Forms
   const [categoryForm, setCategoryForm] = useState({ categoryName: "", description: "" });
@@ -102,27 +103,59 @@ export default function Fnb() {
   };
 
   // ----------------- Package Items -----------------
-  const viewPackageItems = async (pkg) => {
-    setSelectedPackage(pkg);
-    const res = await axios.get(`http://localhost:5000/api/fnb/packages/${pkg.packageID}/items`, { headers: { Authorization: `Bearer ${token}` } });
-    setPackageItems(res.data.data || []);
-  };
+const viewPackageItems = async (pkg) => {
+  setSelectedPackage(pkg);
+  try {
+    const res = await axios.get(
+      `http://localhost:5000/api/fnb/packages/${pkg.packageID}/items`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    const data = res.data.data || { items: [], remainingValue: pkg.totalValue };
+    setPackageItems(data.items || []);
+    setRemainingValue(data.remainingValue || pkg.totalValue);
+  } catch (err) {
+    console.error("Failed to fetch package items", err.response?.data || err.message);
+  }
+};
 
-  const addProductToPackage = async () => {
-    if (!selectedPackage || !packageItemForm.productID || !packageItemForm.quantity) return alert("Select product and quantity");
-    await axios.post(`http://localhost:5000/api/fnb/packages/${selectedPackage.packageID}/items`, {
-      productID: parseInt(packageItemForm.productID),
-      quantity: parseInt(packageItemForm.quantity)
-    }, { headers: { Authorization: `Bearer ${token}` } });
+const addProductToPackage = async () => {
+  if (!selectedPackage || !packageItemForm.productID || !packageItemForm.quantity)
+    return alert("Select product and quantity");
+
+  const product = products.find(p => p.productID === parseInt(packageItemForm.productID));
+  if (!product) return alert("Product not found");
+
+  const quantity = parseInt(packageItemForm.quantity);
+  const newItemTotal = product.price * quantity;
+
+  let extraCharge = 0;
+
+  if (newItemTotal > remainingValue) {
+    extraCharge = newItemTotal - remainingValue; // amount exceeding package
+    const confirmExtra = window.confirm(
+      `This exceeds the package by ₱${extraCharge}. Do you want to add it as extra?`
+    );
+    if (!confirmExtra) return;
+  }
+
+  try {
+    await axios.post(
+      `http://localhost:5000/api/fnb/packages/${selectedPackage.packageID}/items`,
+      {
+        productID: product.productID,
+        quantity,
+        extraCharge
+      },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
     setPackageItemForm({ productID: "", quantity: "" });
     viewPackageItems(selectedPackage);
-  };
-
-  const removeItemFromPackage = async (item) => {
-    if (!window.confirm(`Remove ${item.productName} from ${selectedPackage.packageName}?`)) return;
-    await axios.delete(`http://localhost:5000/api/fnb/packages/${selectedPackage.packageID}/items/${item.packageItemID}`, { headers: { Authorization: `Bearer ${token}` } });
-    viewPackageItems(selectedPackage);
-  };
+  } catch (err) {
+    console.error("Add to package failed:", err.response?.data || err.message);
+    alert(err.response?.data?.message || "Failed to add item");
+  }
+};
 
   // ----------------- JSX -----------------
   return (
@@ -258,15 +291,47 @@ export default function Fnb() {
               <button onClick={() => viewPackageItems(pkg)} className="text-indigo-600 underline mb-2">View Items</button>
               {selectedPackage?.packageID === pkg.packageID && (
                 <>
-                  <div className="flex gap-2 mb-2">
-                    <select value={packageItemForm.productID} onChange={e => setPackageItemForm({ ...packageItemForm, productID: e.target.value })} className="border p-1 rounded w-48">
-                      <option value="">Select Product</option>
-                      {products.map(p => <option key={p.productID} value={p.productID}>{p.productName}</option>)}
-                    </select>
-                    <input type="number" value={packageItemForm.quantity} onChange={e => setPackageItemForm({ ...packageItemForm, quantity: e.target.value })} className="border p-1 w-24" />
-                    <button onClick={addProductToPackage} className="bg-indigo-600 text-white px-2 rounded">Add</button>
-                  </div>
+                  <p className="mb-2 text-sm text-gray-600">
+                    Remaining Package Value: ₱{remainingValue < 0 ? 0 : remainingValue}
+                    {remainingValue < 0 ? ` (Extra: ₱${-remainingValue})` : ""}
+                  </p>
 
+                  <div className="flex gap-2 mb-2">
+                    <select
+                      value={packageItemForm.productID}
+                      onChange={e => setPackageItemForm({ ...packageItemForm, productID: e.target.value })}
+                      className="border p-1 rounded w-48"
+                    >
+                      <option value="">Select Product</option>
+                      {products.map(p => <option key={p.productID} value={p.productID}>{p.productName} - ₱{p.price}</option>)}
+                    </select>
+
+                    <input
+                      type="number"
+                      min="1"
+                      max={selectedPackage && packageItemForm.productID
+                      ? Math.floor(remainingValue / (products.find(p => p.productID === parseInt(packageItemForm.productID))?.price || 1))
+                      : undefined
+                      }
+                      value={packageItemForm.quantity}
+                      onChange={e => setPackageItemForm({ ...packageItemForm, quantity: e.target.value })}
+                      className="border p-1 w-24"
+                      placeholder="Qty"
+                    />
+
+                    <button
+                      onClick={addProductToPackage}
+                      className="px-2 rounded bg-indigo-600 text-white"
+                    >
+                      Add
+                    </button>
+                  </div>
+                  {/* Show max quantity info */}
+                  {packageItemForm.productID && selectedPackage && (
+                    <p className="text-xs text-gray-500">
+                      Max quantity allowed based on remaining package: {Math.floor(remainingValue / (products.find(p => p.productID === parseInt(packageItemForm.productID))?.price || 1))}
+                    </p>
+                  )}
                   <table className="w-full text-sm border rounded">
                     <thead className="bg-gray-100">
                       <tr><th>Product</th><th>Qty</th><th>Actions</th></tr>

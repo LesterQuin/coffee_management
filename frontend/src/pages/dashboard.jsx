@@ -4,38 +4,44 @@ import axios from "axios";
 import { useAuth } from "../context/auth_context";
 
 export default function Dashboard() {
-  const { user } = useAuth();
+  const { user, token } = useAuth(); // ✅ include token
   const [staffList, setStaffList] = useState([]);
   const [chapelList, setChapelList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
-  setLoading(true);
-  setError("");
-  try {
-    // Staff API (if protected)
-    const staffRes = await axios.get("http://localhost:5000/api/staff", {
-      headers: { Authorization: `Bearer ${token}` }, // <-- add token
-    });
-    setStaffList(staffRes.data.data || []);
+    if (!token) return; // Wait until token is available
 
-    // Chapels API
-    const chapelsRes = await axios.get("http://localhost:5000/api/chapel/available", {
-      headers: { Authorization: `Bearer ${token}` }, // <-- add token
-    });
-    setChapelList(chapelsRes.data.data || []);
-  } catch (err) {
-    console.error("Error fetching dashboard data:", err);
-    setError("Failed to load dashboard data");
-  } finally {
-    setLoading(false);
-  }
-};
+    const fetchDashboardData = async () => {
+      setLoading(true);
+      setError("");
+      try {
+        // Fetch Staff
+        const staffRes = await axios.get("http://localhost:5000/api/staff", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setStaffList(staffRes.data.data || []);
+
+        // Fetch Chapels
+        const chapelsRes = await axios.get("http://localhost:5000/api/chapel/available", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setChapelList(chapelsRes.data.data || []);
+      } catch (err) {
+        console.error("Error fetching dashboard data:", err);
+        if (err.response?.status === 404) {
+          setError("API endpoint not found. Check your backend routes.");
+        } else {
+          setError("Failed to load dashboard data");
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
 
     fetchDashboardData();
-  }, []);
+  }, [token]); // ✅ runs when token is ready
 
   if (loading) return <div className="p-6 text-gray-500">Loading dashboard...</div>;
   if (error) return <div className="p-6 text-red-500">{error}</div>;
