@@ -5,6 +5,8 @@ import { useAuth } from "../context/auth_context";
 export default function Chapel() {
   const { token } = useAuth();
   const [chapels, setChapels] = useState([]);
+  const [editingId, setEditingId] = useState(null);
+  const [editData, setEditData] = useState({});
   const [form, setForm] = useState({
     chapelName: "",
     description: "",
@@ -13,14 +15,14 @@ export default function Chapel() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // ✅ Load chapel rooms
+  // Load chapels
   const fetchChapels = async () => {
     try {
       const res = await axios.get("http://localhost:5000/api/chapel", {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.data.success) setChapels(res.data.data);
-    } catch (err) {
+    } catch {
       setError("Failed to load chapel rooms");
     }
   };
@@ -29,7 +31,7 @@ export default function Chapel() {
     fetchChapels();
   }, []);
 
-  // ✅ Create new chapel room
+  // Create new chapel
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -46,20 +48,36 @@ export default function Chapel() {
     }
   };
 
-  // ✅ Update chapel status
-  const handleStatusChange = async (id, newStatus) => {
+  // Start editing
+  const handleEdit = (chapel) => {
+    setEditingId(chapel.chapelID);
+    setEditData({
+      chapelName: chapel.chapelName,
+      description: chapel.description,
+      status: chapel.status,
+    });
+  };
+
+  // Cancel editing
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditData({});
+  };
+
+  // Save edit
+  const saveEdit = async (id) => {
     try {
-      await axios.put(`http://localhost:5000/api/chapel/status/${id}`, 
-          { status: newStatus },
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        fetchChapels();
+      await axios.put(`http://localhost:5000/api/chapel/${id}`, editData, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setEditingId(null);
+      fetchChapels();
     } catch {
-      setError("Failed to update chapel status");
+      setError("Failed to update chapel");
     }
   };
 
-  // ✅ Delete chapel
+  // Delete chapel
   const handleDelete = async (id) => {
     if (!confirm("Are you sure you want to delete this chapel?")) return;
     try {
@@ -73,20 +91,16 @@ export default function Chapel() {
   };
 
   return (
-    <div className="p-6 space-y-8">
-      <h2 className="text-2xl font-semibold mb-4">⛪ Chapel Room Management</h2>
+    <div>
+      <h2>Chapel Room Management</h2>
 
-      {/* Add new chapel form */}
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white p-4 rounded shadow flex flex-wrap gap-3"
-      >
+      {/* Add new chapel */}
+      <form onSubmit={handleSubmit}>
         <input
           type="text"
           placeholder="Chapel Name"
           value={form.chapelName}
           onChange={(e) => setForm({ ...form, chapelName: e.target.value })}
-          className="border p-2 rounded flex-1 min-w-[200px]"
           required
         />
         <input
@@ -94,62 +108,92 @@ export default function Chapel() {
           placeholder="Description"
           value={form.description}
           onChange={(e) => setForm({ ...form, description: e.target.value })}
-          className="border p-2 rounded flex-1 min-w-[200px]"
         />
         <select
           value={form.status}
           onChange={(e) => setForm({ ...form, status: e.target.value })}
-          className="border p-2 rounded"
         >
           <option value="Available">Available</option>
           <option value="Occupied">Occupied</option>
           <option value="Maintenance">Maintenance</option>
         </select>
-        <button
-          disabled={loading}
-          className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700"
-        >
+        <button disabled={loading}>
           {loading ? "Saving..." : "Add Chapel"}
         </button>
       </form>
 
-      {error && <p className="text-red-500">{error}</p>}
+      {error && <p>{error}</p>}
 
-      {/* Chapel table */}
-      <table className="min-w-full bg-white shadow rounded">
-        <thead className="bg-gray-200">
+      {/* Chapel list */}
+      <table>
+        <thead>
           <tr>
-            <th className="py-2 px-4 text-left">Chapel Name</th>
-            <th className="py-2 px-4 text-left">Description</th>
-            <th className="py-2 px-4 text-left">Status</th>
-            <th className="py-2 px-4 text-left">Created At</th>
-            <th className="py-2 px-4 text-center">Actions</th>
+            <th>Chapel Name</th>
+            <th>Description</th>
+            <th>Status</th>
+            <th>Created At</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
           {chapels.map((c) => (
-            <tr key={c.chapelID} className="border-t hover:bg-gray-50">
-              <td className="py-2 px-4">{c.chapelName}</td>
-              <td className="py-2 px-4">{c.description}</td>
-              <td className="py-2 px-4">{c.status}</td>
-              <td className="py-2 px-4">{new Date(c.createdAt).toLocaleDateString()}</td>
-              <td className="py-2 px-4 text-center flex gap-2 justify-center">
-                <select
-                  onChange={(e) => handleStatusChange(c.chapelID, e.target.value)}
-                  value={c.status}
-                  className="border p-1 rounded"
-                >
-                  <option value="Available">Available</option>
-                  <option value="Occupied">Occupied</option>
-                  <option value="Maintenance">Maintenance</option>
-                </select>
-                <button
-                  onClick={() => handleDelete(c.chapelID)}
-                  className="text-red-500 hover:text-red-700"
-                >
-                  🗑️
-                </button>
-              </td>
+            <tr key={c.chapelID}>
+              {editingId === c.chapelID ? (
+                <>
+                  <td>
+                    <input
+                      type="text"
+                      value={editData.chapelName}
+                      onChange={(e) =>
+                        setEditData({ ...editData, chapelName: e.target.value })
+                      }
+                      required
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="text"
+                      value={editData.description}
+                      onChange={(e) =>
+                        setEditData({
+                          ...editData,
+                          description: e.target.value,
+                        })
+                      }
+                    />
+                  </td>
+                  <td>
+                    <select
+                      value={editData.status}
+                      onChange={(e) =>
+                        setEditData({ ...editData, status: e.target.value })
+                      }
+                    >
+                      <option value="Available">Available</option>
+                      <option value="Occupied">Occupied</option>
+                      <option value="Maintenance">Maintenance</option>
+                    </select>
+                  </td>
+                  <td>{new Date(c.createdAt).toLocaleDateString()}</td>
+                  <td>
+                    <button onClick={() => saveEdit(c.chapelID)}>Save</button>
+                    <button onClick={cancelEdit}>Cancel</button>
+                  </td>
+                </>
+              ) : (
+                <>
+                  <td>{c.chapelName}</td>
+                  <td>{c.description}</td>
+                  <td>{c.status}</td>
+                  <td>{new Date(c.createdAt).toLocaleDateString()}</td>
+                  <td>
+                    <button onClick={() => handleEdit(c)}>Edit</button>
+                    <button onClick={() => handleDelete(c.chapelID)}>
+                      Delete
+                    </button>
+                  </td>
+                </>
+              )}
             </tr>
           ))}
         </tbody>

@@ -41,6 +41,22 @@ export const setStatus = async (req, res) => {
     return error(res, e.message);
   }
 };
+// update chapel details
+export const updateChapel = async(req, res) => {
+  const { chapelID } = req.params;
+  const { chapelName, description, status } = req.body;
+
+  try {
+    const updated = await Model.updateChapel (changeID, chapelName, description, status);
+
+    if (!updated) {
+      return error(res, "Chapel not found or no fields to update");
+    }
+    return success (res, null, "Chapel updated succesfully");
+  } catch (e) {
+    return error(res, e.message);
+  }
+}
 // delete
 export const deleteChapel = async (req, res) => {
   const { chapelID } = req.params;

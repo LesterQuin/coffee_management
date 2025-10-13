@@ -12,6 +12,8 @@ router.get("/available", staffAuth ,Controller.listAvailable);
 router.post("/", staffAuth, Controller.create);
 // Set the status of a chapel room
 router.put("/status/:chapelID", staffAuth, Controller.setStatus);
+// 
+router.put("/:chapelID", staffAuth, Controller.updateChapel)
 // Delete
 router.delete("/:chapelID", Controller.deleteChapel);
 

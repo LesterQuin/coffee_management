@@ -44,7 +44,32 @@ export const setChapelStatus = async (chapelID, status) => {
     .execute("sg.LQ_CSS_chapel_set_status");
   return true;
 };
+//
+export const updateChapel = async (chapelID, chapelName, description, status) => {
+  const pool = await poolPromise;
 
+  const updates =[];
+  if ( chapelName !== undefined) updates.push("chapelName = @chapelName");
+  if ( description !== undefined) updates.push("description = @description");
+  if ( status !== undefined) updates.push("status = @status");
+
+  if (updates.length === 0) return false;
+
+  const query = `
+    UPDATE sql.LQ_CSS_chapel_rooms
+    SET ${updates.join(", ")}, updatedAt = GETDATE()
+    WHERE chapelID = @chapelID
+  `;
+
+  const request = pool.request().input("chapelID", sql.Int, chapelID);
+
+  if (chapelName !== undefined) request.input("chapelName", sql.NVarChar, chapelName);
+  if (description !== undefined) request.input("description", sql.NVarChar, description);
+  if (status !== undefined) request.input("status", sql.NVarChar, status);  
+
+  const result = await request.query(query);
+  return result.rowsAffected[0] > 0;
+}
 // Delete
 export const deleteChapel = async (chapelID) => {
   const pool = await poolPromise;
