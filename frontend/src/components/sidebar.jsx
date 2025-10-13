@@ -13,10 +13,10 @@ export default function Sidebar() {
         {user?.role?.toLowerCase() === "admin" && (
           <>
             <li>
-              <Link to="/dashboard" className="block hover:text-blue-400">Dashboard</Link>
+              <Link to="/admin" className="block hover:text-blue-400">Dashboard</Link>
             </li>
             <li>
-              <Link to="/staff" className="block hover:text-blue-400">Staff</Link>
+              <Link to="/account" className="block hover:text-blue-400">Staff</Link>
             </li>
             <li>
               <Link to="/chapel" className="block hover:text-blue-400">Chapel</Link>

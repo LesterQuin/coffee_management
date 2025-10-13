@@ -10,18 +10,12 @@ export default function ProtectedRoute({ children }) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // 2️⃣ Restrict Cashier from accessing admin-only routes
-  const restrictedPaths = ["/dashboard", "/staff", "/chapel", "/fnb", "/report"];
-  const isRestricted = restrictedPaths.some((path) =>
-    location.pathname.startsWith(path)
-  );
+  // 2️⃣ Restrict Cashier from accessing Admin-only pages
+  const adminPaths = ["/staff", "/chapel", "/fnb", "/report", "/admin"];
+  const isAdminPage = adminPaths.some((path) => location.pathname.startsWith(path));
 
-  if (user?.role?.toLowerCase() === "cashier" && isRestricted) {
-    return <Navigate to="/cashier_dashboard" replace />;
-  }
-
-  // 3️⃣ Restrict Admin from accessing cashier routes (optional safety)
-  if (user?.role?.toLowerCase() !== "cashier" && location.pathname.startsWith("/cashier_dashboard")) {
+  if (user?.role?.toLowerCase() === "cashier" && isAdminPage) {
+    // redirect Cashier to /dashboard where Cashier layout is rendered
     return <Navigate to="/dashboard" replace />;
   }
 
