@@ -56,7 +56,7 @@ export const updateChapel = async (chapelID, chapelName, description, status) =>
   if (updates.length === 0) return false;
 
   const query = `
-    UPDATE sql.LQ_CSS_chapel_rooms
+    UPDATE sg.LQ_CSS_chapel_rooms
     SET ${updates.join(", ")}, updatedAt = GETDATE()
     WHERE chapelID = @chapelID
   `;
@@ -67,9 +67,15 @@ export const updateChapel = async (chapelID, chapelName, description, status) =>
   if (description !== undefined) request.input("description", sql.NVarChar, description);
   if (status !== undefined) request.input("status", sql.NVarChar, status);  
 
+  try {
   const result = await request.query(query);
   return result.rowsAffected[0] > 0;
-}
+  } catch (err) {      
+    console.error("DB update error:", err);
+    throw err;
+  }
+};
+
 // Delete
 export const deleteChapel = async (chapelID) => {
   const pool = await poolPromise;

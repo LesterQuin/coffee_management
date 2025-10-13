@@ -64,16 +64,42 @@ export default function Fnb() {
   // ----------------- Product CRUD -----------------
   const createProduct = async () => {
     if (!productForm.productName || !productForm.price || !productForm.categoryID) return alert("Fill all product fields");
-    const payload = { ...productForm, categoryID: parseInt(productForm.categoryID), price: parseFloat(productForm.price), isAvailable: true };
+    const payload = {
+      ...productForm,
+      categoryID: parseInt(productForm.categoryID),
+      price: parseFloat(productForm.price),
+      isAvailable: true,
+    };
     await axios.post("http://localhost:5000/api/fnb/products", payload, { headers: { Authorization: `Bearer ${token}` } });
     setProductForm({ categoryID: "", productName: "", price: "", size: "" });
     loadData();
   };
 
   const updateProduct = async (productID) => {
-    await axios.put(`http://localhost:5000/api/fnb/products/${productID}`, editingProduct, { headers: { Authorization: `Bearer ${token}` } });
-    setEditingProduct(null);
-    loadData();
+    if (!editingProduct.productName || !editingProduct.price || !editingProduct.categoryID) {
+      return alert("Please fill all required fields for the product.");
+    }
+
+    const payload = {
+      productName: editingProduct.productName,
+      description: editingProduct.description || null,
+      price: parseFloat(editingProduct.price),
+      size: editingProduct.size || null,
+      image: editingProduct.image || null,
+      isAvailable: editingProduct.isAvailable ?? true,
+      categoryID: parseInt(editingProduct.categoryID),
+    };
+
+    try {
+      await axios.put(`http://localhost:5000/api/fnb/products/${productID}`, payload, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setEditingProduct(null);
+      loadData();
+    } catch (err) {
+      console.error("Update product DB error:", err.response?.data || err.message);
+      alert(err.response?.data?.message || "Failed to update product");
+    }
   };
 
   const deleteProduct = async (productID) => {
@@ -97,63 +123,106 @@ export default function Fnb() {
   };
 
   const deletePackage = async (packageID) => {
-    if (!window.confirm("Delete this package?")) return;
-    await axios.delete(`http://localhost:5000/api/fnb/packages/${packageID}`, { headers: { Authorization: `Bearer ${token}` } });
-    loadData();
-  };
+  if (!window.confirm("Delete this package?")) return;
 
-  // ----------------- Package Items -----------------
-const viewPackageItems = async (pkg) => {
-  setSelectedPackage(pkg);
   try {
-    const res = await axios.get(
-      `http://localhost:5000/api/fnb/packages/${pkg.packageID}/items`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    const data = res.data.data || { items: [], remainingValue: pkg.totalValue };
-    setPackageItems(data.items || []);
-    setRemainingValue(data.remainingValue || pkg.totalValue);
+    // 1️⃣ Get all items in the package
+    const res = await axios.get(`http://localhost:5000/api/fnb/packages/${packageID}/items`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const items = res.data.data?.items || [];
+
+    // 2️⃣ Delete all items first
+    for (const item of items) {
+      await axios.delete(
+        `http://localhost:5000/api/fnb/packages/${packageID}/items/${item.packageItemID}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+    }
+
+    // 3️⃣ Delete the package
+    await axios.delete(`http://localhost:5000/api/fnb/packages/${packageID}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    alert("Package and all its items deleted successfully");
+    loadData();
   } catch (err) {
-    console.error("Failed to fetch package items", err.response?.data || err.message);
+    console.error("Delete package failed:", err.response?.data || err.message);
+    alert(err.response?.data?.message || "Failed to delete package");
   }
 };
 
-const addProductToPackage = async () => {
-  if (!selectedPackage || !packageItemForm.productID || !packageItemForm.quantity)
-    return alert("Select product and quantity");
 
-  const product = products.find(p => p.productID === parseInt(packageItemForm.productID));
-  if (!product) return alert("Product not found");
+  // ----------------- Package Items -----------------
+  const viewPackageItems = async (pkg) => {
+    setSelectedPackage(pkg);
+    try {
+      const res = await axios.get(
+        `http://localhost:5000/api/fnb/packages/${pkg.packageID}/items`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const data = res.data.data || { items: [], remainingValue: pkg.totalValue };
+      setPackageItems(data.items || []);
+      setRemainingValue(data.remainingValue || pkg.totalValue);
+    } catch (err) {
+      console.error("Failed to fetch package items", err.response?.data || err.message);
+    }
+  };
 
-  const quantity = parseInt(packageItemForm.quantity);
-  const newItemTotal = product.price * quantity;
+  const addProductToPackage = async () => {
+    if (!selectedPackage || !packageItemForm.productID || !packageItemForm.quantity)
+      return alert("Select product and quantity");
 
-  let extraCharge = 0;
+    const product = products.find(p => p.productID === parseInt(packageItemForm.productID));
+    if (!product) return alert("Product not found");
 
-  if (newItemTotal > remainingValue) {
-    extraCharge = newItemTotal - remainingValue; // amount exceeding package
-    const confirmExtra = window.confirm(
-      `This exceeds the package by ₱${extraCharge}. Do you want to add it as extra?`
-    );
-    if (!confirmExtra) return;
-  }
+    const quantity = parseInt(packageItemForm.quantity);
+    const newItemTotal = product.price * quantity;
+
+    let extraCharge = 0;
+
+    if (newItemTotal > remainingValue) {
+      extraCharge = newItemTotal - remainingValue;
+      const confirmExtra = window.confirm(
+        `This exceeds the package by ₱${extraCharge}. Do you want to add it as extra?`
+      );
+      if (!confirmExtra) return;
+    }
+
+    try {
+      await axios.post(
+        `http://localhost:5000/api/fnb/packages/${selectedPackage.packageID}/items`,
+        {
+          productID: product.productID,
+          quantity,
+          extraCharge
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      setPackageItemForm({ productID: "", quantity: "" });
+      viewPackageItems(selectedPackage);
+    } catch (err) {
+      console.error("Add to package failed:", err.response?.data || err.message);
+      alert(err.response?.data?.message || "Failed to add item");
+    }
+  };
+  // ----------------- Remove package item -----------------
+const removeItemFromPackage = async (item) => {
+  if (!window.confirm(`Remove ${item.productName} from package?`)) return;
 
   try {
-    await axios.post(
-      `http://localhost:5000/api/fnb/packages/${selectedPackage.packageID}/items`,
-      {
-        productID: product.productID,
-        quantity,
-        extraCharge
-      },
+    await axios.delete(
+      `http://localhost:5000/api/fnb/packages/${selectedPackage.packageID}/items/${item.packageItemID}`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
 
-    setPackageItemForm({ productID: "", quantity: "" });
+    // Refresh package items and remaining value
     viewPackageItems(selectedPackage);
   } catch (err) {
-    console.error("Add to package failed:", err.response?.data || err.message);
-    alert(err.response?.data?.message || "Failed to add item");
+    console.error("Failed to remove package item", err.response?.data || err.message);
+    alert(err.response?.data?.message || "Failed to remove item");
   }
 };
 
@@ -209,6 +278,7 @@ const addProductToPackage = async () => {
           </select>
           <button onClick={createProduct} className="bg-green-600 text-white px-4 py-2 rounded">Add</button>
         </div>
+
         <table className="w-full text-sm border rounded">
           <thead className="bg-gray-100">
             <tr>
@@ -224,20 +294,82 @@ const addProductToPackage = async () => {
               <tr key={p.productID}>
                 {editingProduct?.productID === p.productID ? (
                   <>
-                    <td><input value={editingProduct.productName} onChange={e => setEditingProduct({ ...editingProduct, productName: e.target.value })} className="border p-1" /></td>
-                    <td>{p.categoryName}</td>
+                    {/* Product Name */}
                     <td>
-                      <select value={editingProduct.size} onChange={e => setEditingProduct({ ...editingProduct, size: e.target.value })} className="border p-1 w-24">
+                      <input
+                        value={editingProduct.productName}
+                        onChange={e =>
+                          setEditingProduct({ ...editingProduct, productName: e.target.value })
+                        }
+                        className="border p-1"
+                      />
+                    </td>
+
+                    {/* Category - display only, not editable */}
+                    <td>
+                      <select
+                        value={editingProduct.categoryID ?? p.categoryID}
+                        onChange={e =>
+                          setEditingProduct({ ...editingProduct, categoryID: parseInt(e.target.value) })
+                        }
+                        className="border p-1 w-48"
+                      >
+                        {/* First option is the saved category */}
+                        <option value={editingProduct.categoryID ?? p.categoryID}>
+                          {categories.find(c => c.categoryID === (editingProduct.categoryID ?? p.categoryID))?.categoryName || "Select Category"}
+                        </option>
+                        {/* Other options */}
+                        {categories
+                          .filter(c => c.categoryID !== (editingProduct.categoryID ?? p.categoryID))
+                          .map(c => (
+                            <option key={c.categoryID} value={c.categoryID}>
+                              {c.categoryName}
+                            </option>
+                          ))}
+                      </select>
+                    </td>
+                    {/* Size */}
+                    <td>
+                      <select
+                        value={editingProduct.size || ""}
+                        onChange={e =>
+                          setEditingProduct({ ...editingProduct, size: e.target.value })
+                        }
+                        className="border p-1 w-24"
+                      >
                         <option value="">Select Size</option>
                         <option value="8oz">8oz</option>
                         <option value="12oz">12oz</option>
                         <option value="16oz">16oz</option>
                       </select>
                     </td>
-                    <td><input type="number" value={editingProduct.price} onChange={e => setEditingProduct({ ...editingProduct, price: e.target.value })} className="border p-1 w-20" /></td>
+
+                    {/* Price */}
                     <td>
-                      <button onClick={() => updateProduct(p.productID)} className="text-green-600">Save</button>
-                      <button onClick={() => setEditingProduct(null)} className="text-gray-500">Cancel</button>
+                      <input
+                        type="number"
+                        value={editingProduct.price}
+                        onChange={e =>
+                          setEditingProduct({ ...editingProduct, price: e.target.value })
+                        }
+                        className="border p-1 w-20"
+                      />
+                    </td>
+
+                    {/* Actions */}
+                    <td>
+                      <button
+                        onClick={() => updateProduct(p.productID)}
+                        className="text-green-600"
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={() => setEditingProduct(null)}
+                        className="text-gray-500"
+                      >
+                        Cancel
+                      </button>
                     </td>
                   </>
                 ) : (
@@ -247,8 +379,18 @@ const addProductToPackage = async () => {
                     <td>{p.size || "-"}</td>
                     <td>₱{p.price}</td>
                     <td>
-                      <button onClick={() => setEditingProduct(p)} className="text-blue-500 mr-2">Edit</button>
-                      <button onClick={() => deleteProduct(p.productID)} className="text-red-500">Delete</button>
+                      <button
+                        onClick={() => setEditingProduct({ ...p })}
+                        className="text-blue-500 mr-2"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => deleteProduct(p.productID)}
+                        className="text-red-500"
+                      >
+                        Delete
+                      </button>
                     </td>
                   </>
                 )}
@@ -262,8 +404,19 @@ const addProductToPackage = async () => {
       <section className="bg-white p-4 rounded shadow">
         <h2 className="text-xl font-semibold">Packages</h2>
         <div className="flex gap-2 mb-3">
-          <input placeholder="Package Name" value={packageForm.packageName} onChange={e => setPackageForm({ ...packageForm, packageName: e.target.value })} className="border p-2 rounded" />
-          <input placeholder="Total Value" type="number" value={packageForm.totalValue} onChange={e => setPackageForm({ ...packageForm, totalValue: e.target.value })} className="border p-2 rounded w-32" />
+          <input
+            placeholder="Package Name"
+            value={packageForm.packageName}
+            onChange={e => setPackageForm({ ...packageForm, packageName: e.target.value })}
+            className="border p-2 rounded"
+          />
+          <input
+            placeholder="Total Value"
+            type="number"
+            value={packageForm.totalValue}
+            onChange={e => setPackageForm({ ...packageForm, totalValue: e.target.value })}
+            className="border p-2 rounded w-32"
+          />
           <button onClick={createPackage} className="bg-purple-600 text-white px-4 py-2 rounded">Add</button>
         </div>
 
@@ -310,8 +463,8 @@ const addProductToPackage = async () => {
                       type="number"
                       min="1"
                       max={selectedPackage && packageItemForm.productID
-                      ? Math.floor(remainingValue / (products.find(p => p.productID === parseInt(packageItemForm.productID))?.price || 1))
-                      : undefined
+                        ? Math.floor(remainingValue / (products.find(p => p.productID === parseInt(packageItemForm.productID))?.price || 1))
+                        : undefined
                       }
                       value={packageItemForm.quantity}
                       onChange={e => setPackageItemForm({ ...packageItemForm, quantity: e.target.value })}
@@ -326,12 +479,14 @@ const addProductToPackage = async () => {
                       Add
                     </button>
                   </div>
-                  {/* Show max quantity info */}
+
+                  {/* Max quantity info */}
                   {packageItemForm.productID && selectedPackage && (
                     <p className="text-xs text-gray-500">
                       Max quantity allowed based on remaining package: {Math.floor(remainingValue / (products.find(p => p.productID === parseInt(packageItemForm.productID))?.price || 1))}
                     </p>
                   )}
+
                   <table className="w-full text-sm border rounded">
                     <thead className="bg-gray-100">
                       <tr><th>Product</th><th>Qty</th><th>Actions</th></tr>
