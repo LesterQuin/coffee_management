@@ -63,16 +63,31 @@ export default function Fnb() {
 
   // ----------------- Product CRUD -----------------
   const createProduct = async () => {
-    if (!productForm.productName || !productForm.price || !productForm.categoryID) return alert("Fill all product fields");
-    const payload = {
-      ...productForm,
-      categoryID: parseInt(productForm.categoryID),
-      price: parseFloat(productForm.price),
-      isAvailable: true,
-    };
-    await axios.post("http://localhost:5000/api/fnb/products", payload, { headers: { Authorization: `Bearer ${token}` } });
-    setProductForm({ categoryID: "", productName: "", price: "", size: "" });
-    loadData();
+    if (!productForm.productName || !productForm.price || !productForm.categoryID)
+      return alert("Fill all product fields");
+
+    const formData = new FormData();
+    formData.append("categoryID", productForm.categoryID);
+    formData.append("productName", productForm.productName);
+    formData.append("price", productForm.price);
+    formData.append("size", productForm.size || "");
+    formData.append("isAvailable", true);
+    if (productForm.image) formData.append("image", productForm.image);
+
+    try {
+      await axios.post("http://localhost:5000/api/fnb/products", formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
+      setProductForm({ categoryID: "", productName: "", price: "", size: "", image: null });
+      loadData();
+    } catch (err) {
+      console.error("Error creating product:", err.response?.data || err.message);
+      alert(err.response?.data?.message || "Failed to create product");
+    }
   };
 
   const updateProduct = async (productID) => {
@@ -80,19 +95,22 @@ export default function Fnb() {
       return alert("Please fill all required fields for the product.");
     }
 
-    const payload = {
-      productName: editingProduct.productName,
-      description: editingProduct.description || null,
-      price: parseFloat(editingProduct.price),
-      size: editingProduct.size || null,
-      image: editingProduct.image || null,
-      isAvailable: editingProduct.isAvailable ?? true,
-      categoryID: parseInt(editingProduct.categoryID),
-    };
+    const formData = new FormData();
+    formData.append("productName", editingProduct.productName);
+    formData.append("price", parseFloat(editingProduct.price));
+    formData.append("size", editingProduct.size || "");
+    formData.append("categoryID", editingProduct.categoryID);
+    formData.append("isAvailable", editingProduct.isAvailable ?? true);
+    if (editingProduct.image instanceof File) {
+      formData.append("image", editingProduct.image);
+    }
 
     try {
-      await axios.put(`http://localhost:5000/api/fnb/products/${productID}`, payload, {
-        headers: { Authorization: `Bearer ${token}` }
+      await axios.put(`http://localhost:5000/api/fnb/products/${productID}`, formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "multipart/form-data",
+        },
       });
       setEditingProduct(null);
       loadData();
@@ -107,6 +125,7 @@ export default function Fnb() {
     await axios.delete(`http://localhost:5000/api/fnb/products/${productID}`, { headers: { Authorization: `Bearer ${token}` } });
     loadData();
   };
+  
 
   // ----------------- Package CRUD -----------------
   const createPackage = async () => {
@@ -264,19 +283,52 @@ const removeItemFromPackage = async (item) => {
       <section className="bg-white p-5 rounded-xl shadow-md">
         <h2 className="text-xl font-semibold">Products</h2>
         <div className="flex gap-2 mb-3 flex-wrap">
-          <select value={productForm.categoryID} onChange={e => setProductForm({ ...productForm, categoryID: e.target.value })} className="border p-2 rounded w-48">
+          <select
+            value={productForm.categoryID}
+            onChange={e => setProductForm({ ...productForm, categoryID: e.target.value })}
+            className="border p-2 rounded w-48"
+          >
             <option value="">Select Category</option>
             {categories.map(c => <option key={c.categoryID} value={c.categoryID}>{c.categoryName}</option>)}
           </select>
-          <input placeholder="Product Name" value={productForm.productName} onChange={e => setProductForm({ ...productForm, productName: e.target.value })} className="border p-2 rounded" />
-          <input placeholder="Price" type="number" value={productForm.price} onChange={e => setProductForm({ ...productForm, price: e.target.value })} className="border p-2 rounded w-24" />
-          <select value={productForm.size} onChange={e => setProductForm({ ...productForm, size: e.target.value })} className="border p-2 rounded w-24">
+
+          <input
+            placeholder="Product Name"
+            value={productForm.productName}
+            onChange={e => setProductForm({ ...productForm, productName: e.target.value })}
+            className="border p-2 rounded"
+          />
+
+          <input
+            placeholder="Price"
+            type="number"
+            value={productForm.price}
+            onChange={e => setProductForm({ ...productForm, price: e.target.value })}
+            className="border p-2 rounded w-24"
+          />
+
+          <select
+            value={productForm.size}
+            onChange={e => setProductForm({ ...productForm, size: e.target.value })}
+            className="border p-2 rounded w-24"
+          >
             <option value="">Size</option>
             <option value="8oz">8oz</option>
             <option value="12oz">12oz</option>
             <option value="16oz">16oz</option>
           </select>
-          <button onClick={createProduct} className="bg-green-600 text-white px-4 py-2 rounded">Add</button>
+
+          {/* 👇 New Image Upload Field */}
+          <input
+            type="file"
+            accept="image/*"
+            onChange={e => setProductForm({ ...productForm, image: e.target.files[0] })}
+            className="border p-2 rounded w-64"
+          />
+
+          <button onClick={createProduct} className="bg-green-600 text-white px-4 py-2 rounded">
+            Add
+          </button>
         </div>
 
         <table className="w-full text-sm border rounded">
@@ -286,6 +338,7 @@ const removeItemFromPackage = async (item) => {
               <th>Category</th>
               <th>Size</th>
               <th>Price</th>
+              <th>Photo</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -356,6 +409,18 @@ const removeItemFromPackage = async (item) => {
                       />
                     </td>
 
+                    {/* Image upload when editing */}
+                    <td>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) =>
+                          setEditingProduct({ ...editingProduct, image: e.target.files[0] })
+                        } 
+                        className= "border p-1 w-64"
+                      />
+                    </td>
+
                     {/* Actions */}
                     <td>
                       <button
@@ -378,6 +443,23 @@ const removeItemFromPackage = async (item) => {
                     <td>{p.categoryName}</td>
                     <td>{p.size || "-"}</td>
                     <td>₱{p.price}</td>
+                    
+                    <td>
+                      {p.image ? (
+                        <img
+                          src = {`http://localhost:5000/${p.image}`}
+                          alt = {p.productName}
+                          className = "w-16 h-16 object-cover rounded"
+                          onError = {(e) => (e.target.src = "http://localhost:5000/uploads/no-image.jpg")}
+                        />
+                      ) : (
+                        <img
+                          src = "http://localhost:5000/uploads/no-image.jpg"
+                          alt = "No Image"
+                          className = "w-16 h-16 object-cover rounded"
+                        />
+                      )}
+                    </td>
                     <td>
                       <button
                         onClick={() => setEditingProduct({ ...p })}

@@ -18,6 +18,8 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
+app.use("/uploads", express.static("uploads"));
+
 //  Define route base paths
 app.use("/api/staff", staffRoutes);
 app.use("/api/chapel", chapelRoutes);

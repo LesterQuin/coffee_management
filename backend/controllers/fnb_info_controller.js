@@ -57,6 +57,12 @@ export const listProducts = async (req, res) => {
 
 export const createProduct = async (req, res) => {
   try {
+    const product = req.body;
+
+    if (req.file) {
+      product.image = `uploads/products/${req.file.filename}`;
+    }
+    
     await Model.createProduct(req.body);
     return success(res, null, "Product created successfully");
   } catch (e) {
@@ -68,16 +74,24 @@ export const createProduct = async (req, res) => {
 export const updateProduct = async (req, res) => {
   const { productID } = req.params;
   try {
-    const updated = await Model.updateProduct(productID, req.body);
+    const updatedData = { ...req.body };
+
+    if (req.file) {
+      updatedData.image = `uploads/products/${req.file.filename}`;
+    }
+
+    const updated = await Model.updateProduct(productID, updatedData);
     if (!updated) {
       return error(res, "Product not found or no fields to update", 404);
     }
+
     return success(res, null, "Product updated successfully");
   } catch (e) {
     console.error("❌ updateProduct error:", e);
     return error(res, e.message);
   }
 };
+
 
 export const deleteProduct = async (req, res) => {
   try {

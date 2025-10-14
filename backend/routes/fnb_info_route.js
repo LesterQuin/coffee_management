@@ -1,24 +1,25 @@
 import express from "express";
 import * as Controller from "../controllers/fnb_info_controller.js";
 import { staffAuth } from "../middleware/auth_middleware.js";
+import upload from "../middleware/upload_middleware.js";
 
 const router = express.Router();
 
 // Get all categories
 router.get("/categories", staffAuth, Controller.listCategories);
 // Create a new category
-router.post("/categories", staffAuth, Controller.createCategory);
+router.post("/categories", staffAuth, upload.single("image"), Controller.createCategory);
 // Update category
-router.put("/categories/:categoryID", staffAuth, Controller.updateCategory);
+router.put("/categories/:categoryID", staffAuth, upload.single("image"), Controller.updateCategory);
 // Delete category
 router.delete("/categories/:categoryID", staffAuth, Controller.deleteCategory);
 
 // Get all products
-router.get("/products", staffAuth, Controller.listProducts);
+router.get("/products", staffAuth, upload.single("image"), Controller.listProducts);
 // Create a new product
-router.post("/products", staffAuth, Controller.createProduct);
+router.post("/products", staffAuth, upload.single("image"), Controller.createProduct);
 // Update product
-router.put("/products/:productID", staffAuth, Controller.updateProduct);
+router.put("/products/:productID", staffAuth, upload.single("image"), Controller.updateProduct);
 // Delete product
 router.delete("/products/:productID", staffAuth, Controller.deleteProduct);
 

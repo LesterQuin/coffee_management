@@ -77,22 +77,30 @@ export const createProduct = async (product) => {
 
 export const updateProduct = async (productID, product) => {
   const pool = await poolPromise;
+
+  let query = `
+    UPDATE sg.LQ_CSS_fnb_products
+    SET categoryID=@categoryID, productName=@productName, description=@description,
+        price=@price, size=@size, isAvailable=@isAvailable, updatedAt=GETDATE()
+  `;
+
+  if (product.image) {
+    query += `, image=@image`;
+  }
+
+  query += ` WHERE productID=@productID`;
+
   const result = await pool.request()
     .input("productID", sql.Int, productID)
     .input("categoryID", sql.Int, product.categoryID)
     .input("productName", sql.NVarChar(150), product.productName)
     .input("description", sql.NVarChar(255), product.description ?? null)
-    .input("price", sql.Decimal(18,2), product.price)
+    .input("price", sql.Decimal(18, 2), product.price)
     .input("size", sql.NVarChar(50), product.size ?? null)
-    .input("image", sql.NVarChar(255), product.image ?? null)
     .input("isAvailable", sql.Bit, product.isAvailable ?? 1)
-    .query(`
-      UPDATE sg.LQ_CSS_fnb_products
-      SET categoryID=@categoryID, productName=@productName, description=@description,
-          price=@price, size=@size, image=@image, isAvailable=@isAvailable,
-          updatedAt=GETDATE()
-      WHERE productID=@productID
-    `);
+    .input("image", sql.NVarChar(255), product.image ?? null)
+    .query(query);
+
   return result.rowsAffected[0] > 0;
 };
 
