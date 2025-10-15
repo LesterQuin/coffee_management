@@ -104,3 +104,26 @@ export const getClientByPin = async (req, res) => {
     return error(res, e.message);
   }
 };
+
+// delete
+export const deleteClient = async (req, res) => {
+  try {
+    const clientID = parseInt(req.params.clientID, 10);
+
+    if (isNaN(clientID)) {
+      return res.status(400).json({ success: false, message: "Invalid client ID" });
+    }
+
+    const deleted = await Model.deleteClient(clientID);
+
+    if (!deleted) {
+      return res.status(404).json({ success: false, message: "Client not found" });
+    }
+
+    return res.json({ success: true, message: "Client deleted successfully" });
+  } catch (err) {
+    console.error("Error deleting client:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+

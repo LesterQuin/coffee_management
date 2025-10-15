@@ -18,5 +18,7 @@ router.post("/login", Controller.clientLogin);
 router.get("/:clientID", staffAuth, Controller.getClientById);
 // Get client by PIN
 router.get("/pin/:pin", staffAuth, Controller.getClientByPin);
+// Delete client by ID
+router.delete("/:clientID", staffAuth, Controller.deleteClient);
 
 export default router;

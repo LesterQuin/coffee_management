@@ -91,3 +91,17 @@ export const getClientById = async (clientID) => {
     .query("SELECT * FROM sg.LQ_CSS_client_info WHERE clientID = @clientID");
   return res.recordset[0];
 };
+// delete
+export const deleteClient = async (clientID) => {
+  const pool = await poolPromise;
+  const result = await pool
+    .request()
+    .input("clientID", sql.Int, clientID)
+    .query(`
+      UPDATE sg.LQ_CSS_client_info
+      SET status = 'Inactive'
+      WHERE clientID = @clientID
+    `);
+
+  return result.rowsAffected[0] > 0;
+};
