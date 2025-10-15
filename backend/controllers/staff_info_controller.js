@@ -37,8 +37,17 @@ export const staffLogin = async (req, res) => {
     if (!staff) return error(res, "Invalid credentials", 400);
     const ok = await bcrypt.compare(password, staff.passwordHash);
     if (!ok) return error(res, "Invalid credentials", 400);
-    const token = jwt.sign({ staffID: staff.staffID, email: staff.email, role: staff.role }, process.env.JWT_SECRET, { expiresIn: "12h" });
-    return success(res, { token }, "Login successful");
+    const token = jwt.sign(
+      {
+        staffID: staff.staffID,
+        email: staff.email,
+        role: staff.role,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "12h" }
+    );
+    const { passwordHash, ...staffData } = staff;
+    return success(res, { token, staff: staffData }, "Login Succesful");
   } catch (e) {
     return error(res, e.message);
   }

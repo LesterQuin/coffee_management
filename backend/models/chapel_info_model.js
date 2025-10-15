@@ -84,3 +84,12 @@ export const deleteChapel = async (chapelID) => {
     .query("DELETE FROM sg.LQ_CSS_chapel_rooms WHERE chapelID = @chapelID");
   return res.rowsAffected[0] > 0;
 };
+
+// get id chapel by packages
+export const getPackageByChapel = async (chapelID) => {
+  const pool = await poolPromise;
+  const result = await pool.request()
+    .input("chapelID", sql.Int, chapelID)
+    .query("SELECT * FROM sg.LQ_CSS_packages WHERE chapelID = @chapelID");
+  return result.recordset;
+};

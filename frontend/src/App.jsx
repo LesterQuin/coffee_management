@@ -7,7 +7,7 @@ import Chapel from "./pages/chapel";
 import Fnb from "./pages/fnb";
 import Reports from "./pages/reports";
 import Login from "./pages/login";
-import CashierDashboard from "./pages/cashier_dashboard";
+import CashierDashboard from "../src/cashier/pages/CashierDashboard";
 import Unauthorized from "./pages/unauthorized";
 import ProtectedRoute from "./context/protected_route";
 import { AuthProvider, useAuth } from "./context/auth_context";

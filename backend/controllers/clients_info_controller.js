@@ -8,9 +8,10 @@ import { success, error } from "../utils/response_helper.js";
 // Get all clients
 export const getAllClients = async (req, res) => {
   try {
-    const data = await Model.getAllClient(); // fixed function name
+    const data = await Model.getAllClient();
     return success(res, data, "Clients list fetched successfully");
   } catch (e) {
+    console.error("GetAllClients Error:", e);
     return error(res, e.message);
   }
 };

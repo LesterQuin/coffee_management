@@ -4,16 +4,31 @@ import { poolPromise, sql } from "../config/db_config.js";
 // Get all client information
 export const getAllClient = async () => {
   const pool = await poolPromise;
-  const result = await pool.request()
-    .query(`
-      SELECT clientID, deceasedName, registeredBy, mobileNo, email, address,
-             schedule_from, schedule_to, chapelID, packageNo, pin,
-             packageBalance, additionalBalance, status, createdAt, updatedAt
-      FROM sg.LQ_CSS_client_info
-      ORDER BY createdAt DESC
-    `);
+  const result = await pool.request().query(`
+    SELECT 
+      c.clientID,
+      c.deceasedName,
+      c.registeredBy,
+      c.mobileNo,
+      c.email,
+      c.address,
+      CONVERT(varchar(19), c.schedule_from, 120) AS scheduleFrom,
+      CONVERT(varchar(19), c.schedule_to, 120) AS scheduleTo,
+      ISNULL(cr.chapelName, 'No Chapel Assigned') AS chapelName,
+      ISNULL(fp.packageName, 'No Package Assigned') AS packageName,
+      c.pin,
+      c.packageBalance,
+      c.additionalBalance,
+      c.status,
+      c.createdAt,
+      c.updatedAt
+    FROM sg.LQ_CSS_client_info AS c
+    LEFT JOIN sg.LQ_CSS_chapel_rooms AS cr ON c.chapelID = cr.chapelID
+    LEFT JOIN sg.LQ_CSS_fnb_packages AS fp ON c.packageNo = fp.packageID
+    ORDER BY c.createdAt DESC;
+  `);
   return result.recordset;
-}
+};
 
 // Register a new client
 export const registerClient = async (client) => {

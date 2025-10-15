@@ -12,9 +12,12 @@ router.get("/available", staffAuth ,Controller.listAvailable);
 router.post("/", staffAuth, Controller.create);
 // Set the status of a chapel room
 router.put("/status/:chapelID", staffAuth, Controller.setStatus);
-// 
+// update 
 router.put("/:chapelID", staffAuth, Controller.updateChapel)
 // Delete
 router.delete("/:chapelID", Controller.deleteChapel);
+// get packages for a specific chapel
+router.get("/:chapelID/packages", staffAuth, Controller.listPackagesByChapel);
+
 
 export default router;

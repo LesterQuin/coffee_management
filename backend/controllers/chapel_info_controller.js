@@ -1,4 +1,5 @@
 // controllers/chapel_info_controller.js
+import { poolPromise } from "../config/db_config.js";
 import * as Model from "../models/chapel_info_model.js";
 import { success, error } from "../utils/response_helper.js";
 
@@ -71,5 +72,16 @@ export const deleteChapel = async (req, res) => {
   } catch (err) {
     console.error("Delete chapel error:", err);
     res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+// get id package by chapel
+export const listPackagesByChapel = async (req, res) => {
+  const chapelID = parseInt(req.params.chapelID);
+  try{
+    const packages = await PackageModel.getPackageByChapel(chapelID);
+    res.json({ data: packages });
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ message: "Failed to fetch packages "});
   }
 };
