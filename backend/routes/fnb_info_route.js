@@ -38,6 +38,9 @@ router.get("/packages/:packageID/items", staffAuth, Controller.listPackageItems)
 // Add an item to a specific package
 router.post("/packages/:packageID/items", staffAuth, Controller.addPackageItem);
 
+// Update a specific item to a specific package
+router.put("/packages/:packageID/items/:itemId", staffAuth, Controller.updatePackageItem);
+
 // Delete a specific item from a specific package
 router.delete("/packages/:packageID/items/:itemId", staffAuth, Controller.deletePackageItem);
 

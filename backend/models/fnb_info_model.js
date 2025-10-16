@@ -225,6 +225,21 @@ export const getPackageItemById = async (itemId) => {
   return res.recordset[0];
 };
 
+export const updatePackageItem = async (packageID, itemId, quantity) => {
+  const pool = await poolPromise;
+  const result = await pool.request()
+    .input("quantity", sql.Int, quantity)
+    .input("packageItemID", sql.Int, itemId)
+    .input("packageID", sql.Int, packageID)
+    .query(`
+      UPDATE sg.LQ_CSS_fnb_package_items
+      SET quantity = @quantity
+      WHERE packageItemID = @packageItemID AND packageID = @packageID
+    `);
+
+  return result.rowsAffected[0] > 0;
+};
+
 // -------------------- Validation: check package total --------------------
 export const canAddPackageItem = async (packageID, productID, quantity) => {
   const pool = await poolPromise;
@@ -262,4 +277,36 @@ export const canAddPackageItem = async (packageID, productID, quantity) => {
     remainingValue: totalValue - totalUsed,
     extraCharge: newTotal > totalValue ? newTotal - totalValue : 0
   };
+};
+
+export const canUpdatePackageItem = async (packageID, packageItemID, newQuantity) => {
+  const pool = await poolPromise;
+
+  // Get package total
+  const pkgRes = await pool.request()
+    .input("packageID", sql.Int, packageID)
+    .query("SELECT totalValue FROM sg.LQ_CSS_fnb_packages WHERE packageID=@packageID");
+  if (!pkgRes.recordset.length) throw new Error("Package not found");
+  const totalValue = pkgRes.recordset[0].totalValue;
+
+  // Get all items and prices
+  const itemsRes = await pool.request()
+    .input("packageID", sql.Int, packageID)
+    .query(`
+      SELECT i.packageItemID, i.quantity, p.price
+      FROM sg.LQ_CSS_fnb_package_items i
+      INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
+      WHERE i.packageID=@packageID
+    `);
+
+  let totalUsed = 0;
+  for (const item of itemsRes.recordset) {
+    if (item.packageItemID === parseInt(packageItemID)) {
+      totalUsed += item.price * newQuantity;
+    } else {
+      totalUsed += item.price * item.quantity;
+    }
+  }
+
+  return totalUsed <= totalValue;
 };

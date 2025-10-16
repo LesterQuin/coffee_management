@@ -185,6 +185,29 @@ export const addPackageItem = async (req, res) => {
   }
 };
 
+export const updatePackageItem = async (req, res) => {
+  const { packageID, itemId } = req.params;
+  const { quantity } = req.body;
+
+  if (!quantity || quantity <= 0) {
+    return error(res, "Invalid quantity value", 400);
+  }
+
+  try {
+    const affectedRows = await Model.updatePackageItem(packageID, itemId, quantity);
+
+    if (affectedRows === 0) {
+      return error(res, "Package item not found", 404);
+    }
+
+    const { items, remainingValue } = await Model.getPackageItems(packageID);
+    return success(res, { items, remainingValue }, "Item quantity updated successfully");
+  } catch (e) {
+    console.error("❌ updatePackageItem error:", e);
+    return error(res, e.message || "Internal server error");
+  }
+};
+
 export const deletePackageItem = async (req, res) => {
   try {
     const { itemId } = req.params;
