@@ -46,6 +46,51 @@ export const removeItem = async (clientID, productID) => {
   return true;
 };
 
+// Update item quantity in cart
+export const updateItem = async (clientID, productID, quantity, size) => {
+  const pool = await poolPromise;
+  
+  try {
+    const resCart = await pool.request()
+      .input("clientID", sql.Int, clientID)
+      .query("SELECT cartID FROM sg.LQ_CSS_fnb_cart WHERE clientID = @clientID");
+
+    const cartID = resCart.recordset[0]?.cartID;
+    if (!cartID){
+      throw new Error("Cart not found for this client");      
+    }
+
+    const resItem = await pool.request()
+      .input("cartID", sql.Int, cartID)
+      .input("productID", sql.Int, productID)
+      .input("size", sql.NVarChar(50), size)
+      .query(`
+        SELECT cartItemID
+        FROM sg.LQ_CSS_fnb_cart_items
+        WHERE cartID = @cartID and productID = @productID AND size = @size
+        `);
+
+      if (resItem.recordset.length === 0) {
+        throw new Error("Item not found in cart");
+      }
+
+      await pool.request()
+        .input("cartID", sql.Int, cartID)
+        .input("productID", sql.Int, productID)
+        .input("quantity", sql.Int, quantity)
+        .input("size", sql.NVarChar(50), size)
+        .query(`
+          UPDATE sg.LQ_CSS_fnb_cart_items
+          SET quantity = @quantity
+          WHERE cartID = @cartID AND productID = @productID AND size = @size
+          `);
+
+      return { message: "Cart item updated successfully" };
+  } catch (error) {
+    throw new Error(error.message);
+  }
+};
+
 // View cart
 export const viewCart = async (clientID) => {
   const pool = await poolPromise;

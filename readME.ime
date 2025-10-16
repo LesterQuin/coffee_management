@@ -27,3 +27,4 @@ You’ll get a .json Postman collection that includes:
 24 GET http://localhost:5000/api/client/:id
 25 PUT http://localhost:5000/api/orders/status/:id
 26 PUT http://localhost:5000/api/chapels/:id
+27 PUT http://localhost:5000/api/cart/update
