@@ -39,6 +39,46 @@ export const getAllClient = async () => {
 
   return result.recordset;
 };
+// get client by ID
+export const getClientById = async (clientID) => {
+  const pool = await poolPromise;
+
+  const result = await pool.request()
+    .input("clientID", sql.Int, clientID)
+    .query(`
+      SELECT 
+        c.clientID,
+        c.deceasedName,
+        c.registeredBy,
+        c.mobileNo,
+        c.email,
+        c.address,
+        CONVERT(varchar(19), c.schedule_from, 120) AS scheduleFrom,
+        CONVERT(varchar(19), c.schedule_to, 120) AS scheduleTo,
+        ISNULL(cr.chapelName, 'No Chapel Assigned') AS chapelName,
+        ISNULL(fp.packageName, 'No Package Assigned') AS packageName,
+        c.pin,
+        c.packageBalance,
+        c.additionalBalance,
+        c.status,
+        c.createdAt,
+        c.updatedAt,
+        s.qrDataUrl,         
+        s.expires_at AS sessionExpires
+      FROM sg.LQ_CSS_client_info AS c
+      LEFT JOIN sg.LQ_CSS_chapel_rooms AS cr ON c.chapelID = cr.chapelID
+      LEFT JOIN sg.LQ_CSS_fnb_packages AS fp ON c.packageNo = fp.packageID
+      LEFT JOIN (
+        SELECT clientID, qrDataUrl, expires_at
+        FROM sg.LQ_CSS_sessions_info
+        WHERE expires_at > GETDATE()
+      ) AS s ON c.clientID = s.clientID
+      WHERE c.clientID = @clientID
+    `);
+
+  return result.recordset[0] || null;
+};
+
 
 // Register a new client and generate QR + session
 export const registerClientWithQR = async (client, userName) => {

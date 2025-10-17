@@ -57,6 +57,30 @@ export const getAllProducts = async () => {
   return res.recordset;
 };
 
+export const getProductByCategory = async (categoryID) => {
+  const pool = await poolPromise;
+  const result = await pool.request()
+    .input("categoryID", sql.Int, categoryID)
+    .query(`
+      SELECT 
+        p.productID,
+        p.productName,
+        p.description,
+        p.price,
+        p.size,
+        p.image,
+        p.isAvailable,
+        c.categoryID,
+        c.categoryName,
+        c.description AS categoryDescription
+      FROM sg.LQ_CSS_fnb_products p
+      INNER JOIN sg.LQ_CSS_fnb_categories c ON p.categoryID = c.categoryID
+      WHERE p.categoryID = @categoryID
+      ORDER BY p.productName
+  `);
+  return result.recordset;
+}
+
 export const createProduct = async (product) => {
   const pool = await poolPromise;
   await pool.request()

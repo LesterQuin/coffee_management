@@ -83,14 +83,25 @@ export const clientLogin = async (req, res) => {
 // Get client by ID
 export const getClientById = async (req, res) => {
   try {
-    const clientID = parseInt(req.params.clientID);
-    const data = await Model.getClientById(clientID);
-    if (!data) return error(res, "Client not found", 404);
+    const { clientID } = req.params;
+
+    if (!clientID || isNaN(clientID)) {
+      return error(res, "Invalid or missing clientID", 400);
+    }
+
+    const data = await Model.getClientById(parseInt(clientID));
+
+    if (!data) {
+      return error(res, "Client not found", 404);
+    }
+
     return success(res, data, "Client fetched successfully");
   } catch (e) {
-    return error(res, e.message);
+    console.error("❌ getClientById error:", e);
+    return error(res, e.message || "Internal server error");
   }
 };
+
 
 // Get client by PIN
 export const getClientByPin = async (req, res) => {

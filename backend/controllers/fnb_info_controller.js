@@ -225,3 +225,24 @@ export const deletePackageItem = async (req, res) => {
     return error(res, e.message);
   }
 };
+
+// -------------------- Products by Category --------------------
+export const listProductByCategory = async (req, res) => {
+  try {
+    const { categoryID } = req.params;
+
+    if (!categoryID) {
+      return error (res, "Category ID is required", 400);
+    }
+    const data = await Model.getProductByCategory(categoryID);
+
+    if (data.length === 0) {
+      return success(res, [], "No products found for this category");
+    }
+
+    return success(res, data, "Products fetched successfully by category");
+  } catch (e) {
+    console.error("❌ listProdcutsByCategory error:", e);
+    return error(res, e.message);
+  }
+}
