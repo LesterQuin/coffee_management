@@ -7,7 +7,9 @@ export default function Staff() {
   const { token } = useAuth();
   const [staffList, setStaffList] = useState([]);
   const [form, setForm] = useState({
-    fullName: "",
+    firstName: "",
+    middleInitial: "",
+    lastName: "",
     email: "",
     phone: "",
     role: "Staff",
@@ -40,7 +42,7 @@ export default function Staff() {
       await axios.post("http://localhost:5000/api/staff/register", form, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      setForm({ fullName: "", email: "", phone: "", role: "Staff", password: "" });
+      setForm({ firstName: "", middleInitial: "", lastName:"", email: "", phone: "", role: "Staff", password: "" });
       fetchStaff();
     } catch (err) {
       setError(err.response?.data?.message || "Error creating staff");
@@ -76,10 +78,26 @@ export default function Staff() {
       >
         <input
           type="text"
-          placeholder="Full Name"
-          value={form.fullName}
-          onChange={(e) => setForm({ ...form, fullName: e.target.value })}
-          className="border p-2 rounded flex-1 min-w-[200px]"
+          placeholder="First Name"
+          value={form.firstName}
+          onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+          className="border p-2 rounded flex-1 min-w-[100px]"
+          required
+        />
+        <input
+          type="text"
+          placeholder="Middle Initial"
+          value={form.middleInitial}
+          onChange={(e) => setForm({ ...form, middleInitial: e.target.value })}
+          className="border p-2 rounded flex-1 min-w-[100px]"
+          required
+        />
+        <input
+          type="text"
+          placeholder="Last Name"
+          value={form.lastNameName}
+          onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+          className="border p-2 rounded flex-1 min-w-[100px]"
           required
         />
         <input
@@ -104,7 +122,6 @@ export default function Staff() {
         >
           <option>Admin</option>
           <option>Casier</option>
-          <option>Staff</option>
         </select>
         <input
           type="password"
@@ -129,7 +146,9 @@ export default function Staff() {
       <table className="min-w-full bg-white shadow rounded">
         <thead className="bg-gray-200">
           <tr>
-            <th className="py-2 px-4 text-left">Name</th>
+            <th className="py-2 px-4 text-left">First Name</th>
+            <th className="py-2 px-4 text-left">Middle Inital</th>
+            <th className="py-2 px-4 text-left">Last Name</th>
             <th className="py-2 px-4 text-left">Email</th>
             <th className="py-2 px-4 text-left">Phone</th>
             <th className="py-2 px-4 text-left">Role</th>
@@ -139,7 +158,9 @@ export default function Staff() {
         <tbody>
           {staffList.map((s) => (
             <tr key={s.staffID} className="border-t hover:bg-gray-50">
-              <td className="py-2 px-4">{s.fullName}</td>
+              <td className="py-2 px-4">{s.firstName}</td>
+              <td className="py-2 px-4">{s.middleInitial}</td>
+              <td className="py-2 px-4">{s.lastName}</td>
               <td className="py-2 px-4">{s.email}</td>
               <td className="py-2 px-4">{s.phone}</td>
               <td className="py-2 px-4">{s.role}</td>

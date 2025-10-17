@@ -20,18 +20,22 @@ export const getStaffByEmail = async (email) => {
 };
 
 // Create a new staff member
-export const createStaff = async ({ fullName, email, phone, role, passwordHash }) => {
+export const createStaff = async ({ firstName, middleInitial = null, lastName, email, phone, role, passwordHash }) => {
   const pool = await poolPromise;
   await pool
     .request()
-    .input("fullName", sql.NVarChar, fullName)
+    .input("firstName", sql.NVarChar, firstName)
+    .input("middleInitial", sql.NVarChar, middleInitial)
+    .input("lastName", sql.NVarChar, lastName)
     .input("email", sql.NVarChar, email)
     .input("phone", sql.NVarChar, phone)
     .input("role", sql.NVarChar, role)
     .input("passwordHash", sql.NVarChar, passwordHash)
     .query(`
-      INSERT INTO sg.LQ_CSS_staff_accounts (fullName, email, phone, role, passwordHash, status, createdAt, updatedAt)
-      VALUES (@fullName, @email, @phone, @role, @passwordHash, 'Active', GETDATE(), GETDATE())
+      INSERT INTO sg.LQ_CSS_staff_accounts 
+        (firstName, middleInitial, lastName, email, phone, role, passwordHash, status, createdAt, updatedAt)
+      VALUES 
+        (@firstName, @middleInitial, @lastName, @email, @phone, @role, @passwordHash, 'Active', GETDATE(), GETDATE());
     `);
 };
 

@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import { success, error } from "../utils/response_helper.js";
+
 dotenv.config();
 
 // Get all staff members
@@ -20,10 +21,16 @@ export const getAllStaff = async (req, res) => {
 // Staff registration
 export const staffRegister = async (req, res) => {
   try {
-    const { fullName, email, phone, role, password } = req.body;
+    const { firstName, middleInitial, lastName, email, phone, role, password } = req.body;
+
+    if (!firstName || !lastName || !email || !password){
+      return error(res, "Missing required fields: firstName, lastName, email, or password", 400);
+    }
+
     const hash = await bcrypt.hash(password, 10);
-    await Model.createStaff({ fullName, email, phone, role, passwordHash: hash });
-    return success(res, null, "Staff created");
+    
+    await Model.createStaff({ firstName, middleInitial, lastName, email, phone, role, passwordHash: hash });
+    return success(res, null, "Staff created successfully.");
   } catch (e) {
     return error(res, e.message);
   }
@@ -35,8 +42,10 @@ export const staffLogin = async (req, res) => {
     const { email, password } = req.body;
     const staff = await Model.getStaffByEmail(email);
     if (!staff) return error(res, "Invalid credentials", 400);
+    
     const ok = await bcrypt.compare(password, staff.passwordHash);
     if (!ok) return error(res, "Invalid credentials", 400);
+    
     const token = jwt.sign(
       {
         staffID: staff.staffID,

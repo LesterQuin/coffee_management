@@ -81,7 +81,9 @@ function StaffOverview({ staffList }) {
         <thead>
           <tr className="bg-gray-100">
             <th className="border px-4 py-2 text-left">ID</th>
-            <th className="border px-4 py-2 text-left">Full Name</th>
+            <th className="border px-4 py-2 text-left">First Name</th>
+            <th className="border px-4 py-2 text-left">Middle Initial</th>
+            <th className="border px-4 py-2 text-left">Last Name</th>
             <th className="border px-4 py-2 text-left">Email</th>
             <th className="border px-4 py-2 text-left">Phone</th>
             <th className="border px-4 py-2 text-left">Role</th>
@@ -92,7 +94,9 @@ function StaffOverview({ staffList }) {
           {staffList.map((staff) => (
             <tr key={staff.staffID}>
               <td className="border px-4 py-2">{staff.staffID}</td>
-              <td className="border px-4 py-2">{staff.fullName}</td>
+              <td className="border px-4 py-2">{staff.firstName}</td>
+              <td className="border px-4 py-2">{staff.middleInitial}</td>
+              <td className="border px-4 py-2">{staff.lastName}</td>
               <td className="border px-4 py-2">{staff.email}</td>
               <td className="border px-4 py-2">{staff.phone}</td>
               <td className="border px-4 py-2">{staff.role}</td>
