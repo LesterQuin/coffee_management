@@ -1,8 +1,5 @@
 // controllers/clients_info_controller.js
 import * as Model from "../models/clients_info_model.js";
-import { generatePin } from "../utils/pin_generator.js";
-import { generateQrDataUrl } from "../utils/qr_generator.js";
-import * as Sessions from "../models/sessions_info_model.js";
 import { success, error } from "../utils/response_helper.js";
 
 // Get all clients
@@ -15,23 +12,23 @@ export const getAllClients = async (req, res) => {
     return error(res, e.message);
   }
 };
+
 // Register a new client
-export const register = async (req, res) => {
+export const registerClient = async (req, res) => {
   try {
-    const data = req.body;
-    const pin = data.pin || generatePin();
+    const userName = req.user?.name || "unknown"; // assuming auth middleware sets req.user
+    const clientData = req.body;
 
-    // Optional: auto-fill registeredBy from logged-in staff
-    const registeredBy = req.user ? req.user.fullName : data.registeredBy;
+    // Call the updated model function
+    const result = await Model.registerClientWithQR(clientData, userName);
 
-    await Model.registerClient({ ...data, pin, registeredBy });
-    const qr = await generateQrDataUrl({ chapelID: data.chapelID, packageNo: data.packageNo, pin });
-
-    return success(res, { pin, qr: qr.toString() }, "Client registered");
+    return success(res, result, "Client registered successfully");
   } catch (e) {
-    return error(res, e.message);
+    console.error("Error registering client:", e);
+    return error(res, e.message || "Failed to register client");
   }
 };
+
 // Update client information
 export const update = async (req, res) => {
   try {
@@ -41,6 +38,7 @@ export const update = async (req, res) => {
     return error(res, e.message);
   }
 };
+
 // Raise client balance
 export const raiseBalance = async (req, res) => {
   try {
@@ -51,6 +49,7 @@ export const raiseBalance = async (req, res) => {
     return error(res, e.message);
   }
 };
+
 // Client login
 export const clientLogin = async (req, res) => {
   try {
@@ -61,22 +60,21 @@ export const clientLogin = async (req, res) => {
       return error(res, "Invalid PIN or inactive", 400);
     }
 
-    const expiresAt = new Date(Date.now() + 6 * 60 * 60 * 1000); // 6 hours
-    const qr = await generateQrDataUrl({
+    const qr = await Model.generateQrDataUrl({
       chapelID: client.chapelID,
       packageNo: client.packageNo,
       pin,
     });
 
-    const sessionId = await Sessions.createSession({
+    const sessionId = await Model.createSession({
       clientID: client.clientID,
       userName,
       pin,
       qrDataUrl: qr,
-      expiresAt,
+      expiresAt: new Date(Date.now() + 6 * 60 * 60 * 1000), // 6 hours
     });
 
-    return success(res, { sessionId, clientID: client.clientID, expiresAt }, "Login successful");
+    return success(res, { sessionId, clientID: client.clientID, expiresAt: new Date(Date.now() + 6 * 60 * 60 * 1000) }, "Login successful");
   } catch (e) {
     return error(res, e.message);
   }
@@ -93,6 +91,7 @@ export const getClientById = async (req, res) => {
     return error(res, e.message);
   }
 };
+
 // Get client by PIN
 export const getClientByPin = async (req, res) => {
   try {
@@ -105,7 +104,7 @@ export const getClientByPin = async (req, res) => {
   }
 };
 
-// delete
+// Delete client
 export const deleteClient = async (req, res) => {
   try {
     const clientID = parseInt(req.params.clientID, 10);
@@ -126,4 +125,3 @@ export const deleteClient = async (req, res) => {
     return res.status(500).json({ success: false, message: "Server error" });
   }
 };
-

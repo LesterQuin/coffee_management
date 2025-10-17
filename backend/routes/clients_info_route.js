@@ -7,7 +7,7 @@ const router = express.Router();
 // Get all clients
 router.get("/", staffAuth, Controller.getAllClients);
 // Register a new client
-router.post("/register", staffAuth, Controller.register);
+router.post("/register", staffAuth, Controller.registerClient);
 // Update client information
 router.put("/update", staffAuth, Controller.update);
 // Raise client balance

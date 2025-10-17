@@ -1,7 +1,6 @@
 // src/cashier/components/ClientForm.jsx
 import { useState } from "react";
 import axios from "axios";
-import { QRCodeSVG } from "qrcode.react";
 
 export default function ClientForm({ token, selectedChapel, selectedPackage, resetSelection }) {
   const [clientInfo, setClientInfo] = useState({
@@ -14,26 +13,24 @@ export default function ClientForm({ token, selectedChapel, selectedPackage, res
     scheduleTo: "",
   });
   const [pin, setPin] = useState("");
+  const [qrDataUrl, setQrDataUrl] = useState("");
+  const [qrPayload, setQrPayload] = useState(null); // parsed QR payload
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [registered, setRegistered] = useState(false); // Track if registration succeeded
+  const [registered, setRegistered] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-
-    setClientInfo((prev) => {
+    setClientInfo(prev => {
       const updated = { ...prev, [name]: value };
-
-      // Validate that scheduleTo is not earlier than scheduleFrom
       if (updated.scheduleFrom && updated.scheduleTo) {
-        const fromDate = new Date(updated.scheduleFrom);
-        const toDate = new Date(updated.scheduleTo);
-        if (toDate < fromDate) {
+        const from = new Date(updated.scheduleFrom);
+        const to = new Date(updated.scheduleTo);
+        if (to < from) {
           alert("End date cannot be before start date.");
-          updated.scheduleTo = ""; // reset invalid date
+          updated.scheduleTo = "";
         }
       }
-
       return updated;
     });
   };
@@ -44,35 +41,38 @@ export default function ClientForm({ token, selectedChapel, selectedPackage, res
       return;
     }
 
-    if (clientInfo.scheduleFrom && clientInfo.scheduleTo) {
-      const fromDate = new Date(clientInfo.scheduleFrom);
-      const toDate = new Date(clientInfo.scheduleTo);
-      if (toDate < fromDate) {
-        alert("End date cannot be before start date.");
-        return;
-      }
-    }
-
-    const newPin = Math.floor(100000 + Math.random() * 900000).toString();
-
-    const payload = {
-      ...clientInfo,
-      chapelID: selectedChapel.chapelID,
-      packageNo: selectedPackage.packageID,
-      pin: newPin,
-    };
-
     setLoading(true);
     setError("");
+
     try {
-      await axios.post("http://localhost:5000/api/clients/register", payload, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const payload = {
+        ...clientInfo,
+        chapelID: selectedChapel.chapelID,
+        chapelName: selectedChapel.chapelName,   // send name
+        packageNo: selectedPackage.packageID,
+        packageName: selectedPackage.packageName  // send name
+      };
 
-      setPin(newPin); // set the PIN
-      setRegistered(true); // show QR and PIN
+      const res = await axios.post(
+        "http://localhost:5000/api/clients/register",
+        payload,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
 
-      // Reset form for next client
+      // Backend returns pin, qrDataUrl, sessionID
+      setPin(res.data.data.pin);
+      setQrDataUrl(res.data.data.qrDataUrl);
+      setQrPayload(res.data.data.qrPayload);
+
+      // Parse QR payload JSON for display
+      try {
+        setQrPayload(JSON.parse(atob(res.data.data.qrDataUrl.split(",")[1])));
+      } catch {
+        setQrPayload(null);
+      }
+      setRegistered(true);
+
+      // Reset form
       setClientInfo({
         deceasedName: "",
         registeredBy: "",
@@ -84,9 +84,7 @@ export default function ClientForm({ token, selectedChapel, selectedPackage, res
       });
 
       alert("Client registered successfully!");
-      setTimeout(() => {
-        resetSelection();
-      }, 10000);
+      setTimeout(() => resetSelection(), 10000);
     } catch (err) {
       console.error("Registration error:", err);
       setError("Registration failed. Check console for details.");
@@ -166,17 +164,16 @@ export default function ClientForm({ token, selectedChapel, selectedPackage, res
         className="border p-2 rounded w-full bg-gray-100"
       />
 
-      {/* Show PIN and QR only after registration */}
-      {registered && (
-        <div className="flex items-center space-x-4">
-          <div>
-            <p className="font-semibold">Generated PIN:</p>
-            <p className="text-xl font-bold">{pin}</p>
-          </div>
-          <QRCodeSVG value={pin} size={128} />
+      {registered && qrPayload && (
+        <div className="text-sm bg-gray-100 p-2 rounded">
+          <p><strong>QR Info:</strong></p>
+          <p>Deceased: {qrPayload.deceasedName}</p>
+          <p>Chapel: {qrPayload.chapelName} (ID: {qrPayload.chapelID})</p>
+          <p>Package: {qrPayload.packageName} (ID: {qrPayload.packageNo})</p>
+          <p>PIN: {qrPayload.pin}</p>
         </div>
       )}
-
+      
       <button
         onClick={handleSubmit}
         disabled={loading}

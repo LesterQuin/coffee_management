@@ -1,5 +1,7 @@
 // models/clients_info_model.js
 import { poolPromise, sql } from "../config/db_config.js";
+import QRCode from "qrcode";
+import { createSession } from "./sessions_info_model.js";
 
 // Get all client information
 export const getAllClient = async () => {
@@ -21,19 +23,32 @@ export const getAllClient = async () => {
       c.additionalBalance,
       c.status,
       c.createdAt,
-      c.updatedAt
+      c.updatedAt,
+      s.qrDataUrl,         -- latest session QR
+      s.expires_at AS sessionExpires
     FROM sg.LQ_CSS_client_info AS c
     LEFT JOIN sg.LQ_CSS_chapel_rooms AS cr ON c.chapelID = cr.chapelID
     LEFT JOIN sg.LQ_CSS_fnb_packages AS fp ON c.packageNo = fp.packageID
+    LEFT JOIN (
+      SELECT clientID, qrDataUrl, expires_at
+      FROM sg.LQ_CSS_sessions_info
+      WHERE expires_at > GETDATE()
+    ) AS s ON c.clientID = s.clientID
     ORDER BY c.createdAt DESC;
   `);
+
   return result.recordset;
 };
 
-// Register a new client
-export const registerClient = async (client) => {
+// Register a new client and generate QR + session
+export const registerClientWithQR = async (client, userName) => {
   const pool = await poolPromise;
-  const request = pool.request()
+
+  // Generate a random 6-digit PIN
+  const pin = Math.floor(100000 + Math.random() * 900000).toString();
+
+  // Insert the client
+  await pool.request()
     .input("deceasedName", sql.NVarChar(150), client.deceasedName)
     .input("registeredBy", sql.NVarChar(150), client.registeredBy)
     .input("mobileNo", sql.NVarChar(20), client.mobileNo)
@@ -43,65 +58,41 @@ export const registerClient = async (client) => {
     .input("scheduleTo", sql.DateTime, client.scheduleTo)
     .input("chapelID", sql.Int, client.chapelID)
     .input("packageNo", sql.Int, client.packageNo ?? null)
-    .input("pin", sql.NVarChar(10), client.pin)
+    .input("pin", sql.NVarChar(10), pin)
     .input("packageBalance", sql.Decimal(18,2), client.packageBalance ?? 0)
-    .input("additionalBalance", sql.Decimal(18,2), client.additionalBalance ?? 0);
-
-  await request.execute("sg.LQ_CSS_client_register");
-  return true;
-};
-// Update client information
-export const updateClient = async (data) => {
-  const pool = await poolPromise;
-  await pool.request()
-    .input("clientID", sql.Int, data.clientID)
-    .input("mobileNo", sql.NVarChar(20), data.mobileNo)
-    .input("email", sql.NVarChar(150), data.email)
-    .input("address", sql.NVarChar(250), data.address)
-    .input("scheduleFrom", sql.DateTime, data.scheduleFrom)
-    .input("scheduleTo", sql.DateTime, data.scheduleTo)
-    .input("packageBalance", sql.Decimal(18,2), data.packageBalance)
-    .input("additionalBalance", sql.Decimal(18,2), data.additionalBalance)
-    .execute("sg.LQ_CSS_client_update");
-  return true;
-};
-// Raise client balance
-export const raiseBalance = async (clientID, amount, type) => {
-  const pool = await poolPromise;
-  await pool.request()
-    .input("clientID", sql.Int, clientID)
-    .input("amount", sql.Decimal(18,2), amount)
-    .input("type", sql.NVarChar(20), type)
-    .execute("sg.LQ_CSS_client_raise_balance");
-  return true;
-};
-// Get client information by PIN
-export const getClientByPin = async (pin) => {
-  const pool = await poolPromise;
-  const res = await pool.request()
-    .input("pin", sql.NVarChar, pin)
-    .query("SELECT * FROM sg.LQ_CSS_client_info WHERE pin = @pin AND status = 'Active'");
-  return res.recordset[0];
-};
-// Get client information by ID
-export const getClientById = async (clientID) => {
-  const pool = await poolPromise;
-  const res = await pool.request()
-    .input("clientID", sql.Int, clientID)
-    .query("SELECT * FROM sg.LQ_CSS_client_info WHERE clientID = @clientID");
-  return res.recordset[0];
-};
-// delete
-export const deleteClient = async (clientID) => {
-  const pool = await poolPromise;
-  const result = await pool
-    .request()
-    .input("clientID", sql.Int, clientID)
+    .input("additionalBalance", sql.Decimal(18,2), client.additionalBalance ?? 0)
     .query(`
-      UPDATE sg.LQ_CSS_client_info
-      SET status = 'Inactive'
-      WHERE clientID = @clientID
+      INSERT INTO sg.LQ_CSS_client_info
+      (deceasedName, registeredBy, mobileNo, email, address, schedule_from, schedule_to, chapelID, packageNo, pin, packageBalance, additionalBalance, status, createdAt, updatedAt)
+      VALUES
+      (@deceasedName, @registeredBy, @mobileNo, @email, @address, @scheduleFrom, @scheduleTo, @chapelID, @packageNo, @pin, @packageBalance, @additionalBalance, 'Active', GETDATE(), GETDATE());
     `);
 
-  return result.rowsAffected[0] > 0;
+  // Get last inserted clientID
+  const result = await pool.request()
+    .query("SELECT TOP 1 clientID FROM sg.LQ_CSS_client_info ORDER BY clientID DESC");
+  const clientID = result.recordset?.[0]?.clientID;
+  if (!clientID) throw new Error("Failed to register client in database");
+
+  // QR payload including names
+  const qrPayload = {
+    pin,
+    chapelID: client.chapelID,
+    chapelName: client.chapelName,       // send name from frontend
+    packageNo: client.packageNo,
+    packageName: client.packageName,     // send name from frontend
+    deceasedName: client.deceasedName
+  };
+
+  const qrDataUrl = await QRCode.toDataURL(JSON.stringify(qrPayload));
+
+  const sessionID = await createSession({
+    clientID,
+    userName,
+    pin,
+    qrDataUrl,
+    expiresAt: new Date(Date.now() + 7*24*60*60*1000),
+  });
+
+  return { clientID, pin, qrDataUrl, sessionID };
 };
