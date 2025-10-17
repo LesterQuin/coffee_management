@@ -5,7 +5,10 @@ export const getAllStaff = async () => {
   const pool = await poolPromise;
   const result = await pool
     .request()
-    .query("SELECT * FROM sg.LQ_CSS_staff_accounts");
+    .query(`
+      SELECT staffID, firstName, middleInitial, lastName, email, phone, role, status, createdAt, updatedAt
+      FROM sg.LQ_CSS_staff_accounts
+    `);
   return result.recordset;
 };
 
@@ -20,7 +23,7 @@ export const getStaffByEmail = async (email) => {
 };
 
 // Create a new staff member
-export const createStaff = async ({ firstName, middleInitial = null, lastName, email, phone, role, passwordHash }) => {
+export const createStaff = async ({ firstName, middleInitial, lastName, email, phone, role, passwordHash }) => {
   const pool = await poolPromise;
   await pool
     .request()
@@ -32,10 +35,8 @@ export const createStaff = async ({ firstName, middleInitial = null, lastName, e
     .input("role", sql.NVarChar, role)
     .input("passwordHash", sql.NVarChar, passwordHash)
     .query(`
-      INSERT INTO sg.LQ_CSS_staff_accounts 
-        (firstName, middleInitial, lastName, email, phone, role, passwordHash, status, createdAt, updatedAt)
-      VALUES 
-        (@firstName, @middleInitial, @lastName, @email, @phone, @role, @passwordHash, 'Active', GETDATE(), GETDATE());
+      INSERT INTO sg.LQ_CSS_staff_accounts (firstName, middleInitial, lastName, email, phone, role, passwordHash, status, createdAt, updatedAt)
+      VALUES (@firstName, @middleInitial, @lastName, @email, @phone, @role, @passwordHash, 'Active', GETDATE(), GETDATE())
     `);
 };
 

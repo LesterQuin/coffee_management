@@ -1,6 +1,44 @@
 // controllers/fnb_cart_controller.js
+import { group } from "console";
 import * as Model from "../models/fnb_cart_model.js";
 import { success, error } from "../utils/response_helper.js";
+
+// view all carts
+export const viewAllCarts = async (req, res) => {
+  try {
+    const carts = await Model.viewAllCarts();
+
+    // Group items by cartID
+    const grouped = carts.reduce((acc, item) => {
+      if (!acc[item.cartID]) {
+        acc[item.cartID] = {
+          cartID: item.cartID,
+          clientID: item.clientID,
+          deceasedName: item.deceasedName,
+          customerName: item.customerName,
+          customerNumber: item.customerNumber,
+          items: [],
+          totalAmount: 0
+        };
+      }
+      acc[item.cartID].items.push({
+        cartItemID: item.cartItemID,
+        productID: item.productID,
+        description: item.productName,
+        qty: item.quantity,
+        size: item.size,
+        amount: item.price,
+        total: item.total
+      });
+      acc[item.cartID].totalAmount += item.total;
+      return acc;
+    }, {});
+
+    return success(res, Object.values(grouped), "All carts retrieved successfully");
+  } catch (e) {
+    return error(res, e.message, 500);
+  }
+};
 
 // Add item to cart
 export const addItem = async (req, res) => {
@@ -58,13 +96,17 @@ export const viewCart = async (req, res) => {
 export const checkout = async (req, res) => {
   try {
     const { clientID, paymentType } = req.body;
+    const staffID = req.user.staffID;
 
     if (!clientID || !paymentType) {
       return error(res, "Missing required fields: clientID, paymentType", 400);
     }
 
-    const result = await Model.checkout(clientID, paymentType);
-    return success(res, result, "Cart checked out and order created");
+    const result = await Model.checkout(clientID, paymentType, staffID);
+    
+    const receipt = await Model.getOrderReceipt(result.orderID);
+
+    return success(res, receipt, "Cart checked out and order created successfully");
   } catch (e) {
     return error(res, e.message, 500);
   }

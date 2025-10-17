@@ -106,8 +106,27 @@ export const viewCart = async (clientID) => {
   return res.recordset;
 };
 
+// view all
+export const viewAllCarts = async () => {
+  const pool = await poolPromise;
+  const res = await pool.request()
+    .query(`
+      SELECT c.cartID, c.clientID, ci.deceasedName, ci.registeredBy AS customerName,
+             ci.mobileNo AS customerNumber,
+             i.cartItemID, i.productID, i.quantity, i.size, p.productName, p.price,
+             (i.quantity * p.price) AS total
+      FROM sg.LQ_CSS_fnb_cart c
+      INNER JOIN sg.LQ_CSS_client_info ci ON c.clientID = ci.clientID
+      INNER JOIN sg.LQ_CSS_fnb_cart_items i ON i.cartID = c.cartID
+      INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
+      ORDER BY c.cartID, i.cartItemID
+    `);
+
+  return res.recordset;
+};
+
 // Checkout cart → create order
-export const checkout = async (clientID, paymentType) => {
+export const checkout = async (clientID, paymentType, staffID) => {
   const pool = await poolPromise;
 
   const res = await pool.request()
@@ -115,5 +134,94 @@ export const checkout = async (clientID, paymentType) => {
     .input("paymentType", sql.NVarChar(20), paymentType)
     .execute("sg.LQ_CSS_fnb_cart_checkout");
 
-  return res.recordset[0]; // { orderID, totalAmount }
+  const { orderID, totalAmount } = res.recordset[0];
+
+  const clientRes = await pool.request()
+   .input("clientID", sql.Int, clientID)
+   .query(`
+    SELECT c.deceasedName, 
+           c.registeredBy AS customerName, 
+           c.mobileNo AS customerNumber,
+           cr.chapelName,
+           fp.packageName
+    FROM sg.LQ_CSS_client_info c
+    LEFT JOIN sg.LQ_CSS_chapel_rooms cr ON c.chapelID = cr.chapelID
+    LEFT JOIN sg.LQ_CSS_fnb_packages fp ON c.packageNo = fp.packageID
+    WHERE c.clientID = @clientID
+  `);
+
+  const client = clientRes.recordset[0];
+
+  const itemsRes = await pool.request()
+    .input("orderID", sql.Int, orderID)
+    .query(`
+      SELECT p.productName AS description, 
+              i.quantity AS qty, 
+              p.price AS amount, 
+              i.size
+      FROM sg.LQ_CSS_fnb_order_items i
+      INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
+      WHERE i.orderID = @orderID
+    `);
+
+  const items = itemsRes.recordset;
+
+  const receipt = {
+    orderID: orderID,
+    deceasedName: client.deceasedName,
+    chapel: client.chapelName,
+    package: client.packageName,
+    orderDateTime: new Date().toISOString(),
+    customerName: client.customerName,
+    customerNumber: client.customerNumber,
+    status: "Pending",
+    items,
+    total: totalAmount,
+    handleByStaffID: staffID // optional only this
+  };
+
+  return receipt; // { orderID, totalAmount }
+};
+
+// get order
+export const getOrderReceipt = async (orderID) => {
+  const pool = await poolPromise;
+
+  // 1️⃣ Fetch main order info + client + chapel + package
+  const orderRes = await pool.request()
+    .input("orderID", sql.Int, orderID)
+    .query(`
+      SELECT 
+        o.orderID,
+        c.deceasedName,
+        cr.chapelName AS chapel,
+        fp.packageName AS package,
+        c.registeredBy AS customerName,
+        c.mobileNo AS customerNumber,
+        o.status,
+        o.createdAt AS orderDateTime
+      FROM sg.LQ_CSS_fnb_orders o
+      INNER JOIN sg.LQ_CSS_client_info c ON o.clientID = c.clientID
+      LEFT JOIN sg.LQ_CSS_chapel_rooms cr ON c.chapelID = cr.chapelID
+      LEFT JOIN sg.LQ_CSS_fnb_packages fp ON c.packageNo = fp.packageID
+      WHERE o.orderID = @orderID
+    `);
+
+  const order = orderRes.recordset?.[0];
+  if (!order) return null;
+
+  // 2️⃣ Fetch order items
+  const itemsRes = await pool.request()
+    .input("orderID", sql.Int, orderID)
+    .query(`
+      SELECT p.productName AS description, oi.quantity AS qty, p.price AS amount, oi.size
+      FROM sg.LQ_CSS_fnb_order_items oi
+      INNER JOIN sg.LQ_CSS_fnb_products p ON oi.productID = p.productID
+      WHERE oi.orderID = @orderID
+    `);
+
+  const items = itemsRes.recordset || [];
+  const total = items.reduce((sum, i) => sum + i.qty * i.amount, 0);
+
+  return { ...order, items, total };
 };
