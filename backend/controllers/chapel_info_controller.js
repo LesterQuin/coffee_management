@@ -25,9 +25,15 @@ export const listAvailable = async (req, res) => {
 // Create a new chapel room
 export const create = async (req, res) => {
   try {
-    const { chapelName, description } = req.body;
-    await Model.createChapel(chapelName, description);
-    return success(res, null, "Chapel created");
+    const { chapelName, description, status } = req.body;
+
+    if (!chapelName || !status){
+      return error(res, "Both ChapelName and Status is required", 400);
+    }
+    const chapelStatus = status || "available";
+
+    await Model.createChapel(chapelName, description, chapelStatus);
+    return success(res, null, "Chapel created successfully");
   } catch (e) {
     return error(res, e.message);
   }

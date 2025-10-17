@@ -23,14 +23,15 @@ export const getAvailableChapels = async () => {
 };
 
 // Create a new chapel room
-export const createChapel = async (chapelName, description) => {
+export const createChapel = async (chapelName, description, status= "Available") => {
   const pool = await poolPromise;
   await pool.request()
     .input("chapelName", sql.NVarChar, chapelName)
     .input("description", sql.NVarChar, description ?? null)
+    .input("status", sql.NVarChar, status)
     .query(`
-      INSERT INTO sg.LQ_CSS_chapel_rooms (chapelName, description)
-      VALUES (@chapelName, @description)
+      INSERT INTO sg.LQ_CSS_chapel_rooms (chapelName, description, status, createdAt, updatedAt)
+      VALUES (@chapelName, @description, @status, GETDATE(), GETDATE())
     `);
   return true;
 };
