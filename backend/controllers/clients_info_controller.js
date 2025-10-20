@@ -32,10 +32,28 @@ export const registerClient = async (req, res) => {
 // Update client information
 export const update = async (req, res) => {
   try {
-    await Model.updateClient(req.body);
-    return success(res, null, "Client updated");
+    const body = req.body || {}; // fallback if req.body is undefined
+    const { clientID, ...fieldsToUpdate } = body;
+
+    if (!clientID) {
+      return res.status(400).json({ success: false, message: "clientID is required for update" });
+    }
+
+    if (Object.keys(fieldsToUpdate).length === 0) {
+      return res.status(400).json({ success: false, message: "No fields provided to update" });
+    }
+
+    // Call the model function to update dynamically
+    const updated = await Model.updateClient({ clientID, ...fieldsToUpdate });
+
+    if (!updated) {
+      return res.status(404).json({ success: false, message: "Client not found or no changes applied" });
+    }
+
+    return res.json({ success: true, message: "Client updated successfully" });
   } catch (e) {
-    return error(res, e.message);
+    console.error("Update Client Error:", e);
+    return res.status(500).json({ success: false, message: e.message || "Server error" });
   }
 };
 
