@@ -14,6 +14,7 @@ import cartRoutes from "./routes/fnb_cart_route.js";
 import paymentRoutes from "./routes/payment_route.js";
 import reportRoute from "./routes/reports_routes.js";
 import fnbPackageRoutes from "./routes/fnb_package_route.js"
+import tableRoutes from "./routes/table_routes.js"
 
 const app = express();
 
@@ -36,6 +37,7 @@ app.use("/api/cart", cartRoutes);
 app.use("/api/payment", paymentRoutes);
 app.use("/api/reports", reportRoute);
 app.use("/api/fnb", fnbPackageRoutes);
+app.use("/api/tables", tableRoutes);
 
 app.get("/", (req, res) => {
   res.send("Coffee Shop Chapel System API is running 🚀");
