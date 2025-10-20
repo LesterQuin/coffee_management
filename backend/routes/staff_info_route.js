@@ -21,4 +21,4 @@ router.get("/:staffID", staffAuth, Controller.getStaffByID);
 // DELETE api/staff/:id
 router.delete("/:staffID", staffAuth,  Controller.deleteStaff);
 
-export default router;
+export default router;  

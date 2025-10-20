@@ -36,7 +36,7 @@ router.delete("/packages/:packageID", staffAuth, Controller.deletePackage);
 router.get("/packages/:packageID/items", staffAuth, Controller.listPackageItems);
 
 // Get products ny category
-router.get("/categories/:categoryID/products", Controller.listProductByCategory);
+router.get("/categories/:categoryID/products", staffAuth, Controller.listProductByCategory);
 
 // Add an item to a specific package
 router.post("/packages/:packageID/items", staffAuth, Controller.addPackageItem);

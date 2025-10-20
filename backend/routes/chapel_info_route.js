@@ -15,7 +15,7 @@ router.put("/status/:chapelID", staffAuth, Controller.setStatus);
 // update 
 router.put("/:chapelID", staffAuth, Controller.updateChapel)
 // Delete
-router.delete("/:chapelID", Controller.deleteChapel);
+router.delete("/:chapelID", staffAuth, Controller.deleteChapel);
 // get packages for a specific chapel
 router.get("/:chapelID/packages", staffAuth, Controller.listPackagesByChapel);
 
