@@ -17,7 +17,7 @@ export const getAvailableChapels = async () => {
   const result = await pool.request().query(`
     SELECT chapelID, chapelName, status, description 
     FROM sg.LQ_CSS_chapel_rooms 
-    WHERE status = 'Available'
+    WHERE status = 'Active'
   `);
   return result.recordset;
 };

@@ -7,7 +7,7 @@ const router = express.Router();
 // Get all chapels
 router.get("/", staffAuth, Controller.getAllChapels);
 // Get all available chapels
-router.get("/available", staffAuth ,Controller.listAvailable);
+router.get("/active", staffAuth ,Controller.listAvailable);
 // Create a new chapel room
 router.post("/", staffAuth, Controller.create);
 // Set the status of a chapel room

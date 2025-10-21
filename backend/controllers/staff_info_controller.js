@@ -21,15 +21,15 @@ export const getAllStaff = async (req, res) => {
 // Staff registration
 export const staffRegister = async (req, res) => {
   try {
-    const { firstName, middleInitial, lastName, email, phone, role, password } = req.body;
+    const { firstName, middleInitial, lastName, email, phone, roleId, password } = req.body;
 
-    if (!firstName || !lastName || !email || !password) {
-      return error(res, "Missing required fields: firstName, lastName, email, or password", 400);
+    if (!firstName || !lastName || !email || !password || !roleId) {
+      return error(res, "Missing required fields: firstName, lastName, email, password, or roleId", 400);
     }
 
     const hash = await bcrypt.hash(password, 10);
-    
-    await Model.createStaff({ firstName, middleInitial, lastName, email, phone, role, passwordHash: hash });
+    await Model.createStaff({ firstName, middleInitial, lastName, email, phone, roleId, statusId, passwordHash: hash });
+
     return success(res, null, "Staff created successfully.");
   } catch (e) {
     return error(res, e.message);
@@ -93,17 +93,31 @@ export const deleteStaff = async (req, res) => {
 // Update staff (role-based validation)
 export const updateStaff = async (req, res) => {
   try {
-    const { staffID, ...fieldsToUpdate } = req.body;
+    const { staffID } = req.params;
+    const { roleId, ...fieldsToUpdate } = req.body;
 
-    if (!staffID) return res.status(400).json({ success: false, message: "staffID is required" });
-    if (Object.keys(fieldsToUpdate).length === 0) return res.status(400).json({ success: false, message: "No fields provided to update" });
+    if (Object.keys(fieldsToUpdate).length === 0 && !roleId)
+      return res.status(400).json({ success: false, message: "No fields provided to update" });
 
-    // current user role from auth middleware (req.user.role)
     const currentUserRole = req.user.role;
 
-    const updated = await Model.updateStaff({ staffID, ...fieldsToUpdate }, currentUserRole);
+    // If roleId is provided, fetch the role name
+    if (roleId !== undefined) {
+      const pool = await poolPromise;
+      const roleRes = await pool.request()
+        .input("roleId", sql.Int, roleId)
+        .query("SELECT role FROM sg.LQ_CSS_roles WHERE roledId = @roleId");
 
-    if (!updated) return res.status(404).json({ success: false, message: "Staff not found or no changes applied" });
+      if (!roleRes.recordset[0])
+        return res.status(400).json({ success: false, message: `Invalid roleId: ${roleId}` });
+
+      fieldsToUpdate.role = roleRes.recordset[0].role;
+    }
+
+    const updated = await Model.updateStaff({ staffID: parseInt(staffID), ...fieldsToUpdate }, currentUserRole);
+
+    if (!updated)
+      return res.status(404).json({ success: false, message: "Staff not found or no changes applied" });
 
     return res.json({ success: true, message: "Staff updated successfully" });
   } catch (err) {

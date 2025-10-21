@@ -23,27 +23,35 @@ export const getStaffByEmail = async (email) => {
 };
 
 // Create a new staff member with status Active
-export const createStaff = async ({ firstName, middleInitial, lastName, email, phone, role, passwordHash }) => {
+export const createStaff = async ({ firstName, middleInitial, lastName, email, phone, roleId, statusId, passwordHash }) => {
   const pool = await poolPromise;
 
-  // Optional: validate role exists in roles table
-  const rolesResult = await pool.request().query("SELECT role FROM sg.LQ_CSS_roles");
-  const validRoles = rolesResult.recordset.map(r => r.role);
-  if (!validRoles.includes(role)) throw new Error(`Invalid role: ${role}`);
+  // Validate roleId exists
+  const roleRes = await pool.request()
+    .input("roleId", sql.Int, roleId)
+    .query("SELECT roledId FROM sg.LQ_CSS_roles WHERE roledId = @roleId");
+  if (!roleRes.recordset[0]) throw new Error(`Invalid roleId: ${roleId}`);
 
-  await pool
-    .request()
+  // Validate statusId exists
+  const statusRes = await pool.request()
+    .input("statusId", sql.Int, statusId)
+    .query("SELECT statusId FROM sg.LQ_CSS_status WHERE statusId = @statusId");
+  if (!statusRes.recordset[0]) throw new Error(`Invalid statusId: ${statusId}`);
+
+  await pool.request()
     .input("firstName", sql.NVarChar, firstName)
     .input("middleInitial", sql.NVarChar, middleInitial)
     .input("lastName", sql.NVarChar, lastName)
     .input("email", sql.NVarChar, email)
     .input("phone", sql.NVarChar, phone)
-    .input("role", sql.NVarChar, role)
+    .input("roleId", sql.Int, roleId)
+    .input("statusId", sql.Int, statusId)
     .input("passwordHash", sql.NVarChar, passwordHash)
     .query(`
-      INSERT INTO sg.LQ_CSS_staff_accounts 
-      (firstName, middleInitial, lastName, email, phone, role, passwordHash, status, createdAt, updatedAt)
-      VALUES (@firstName, @middleInitial, @lastName, @email, @phone, @role, @passwordHash, 'Active', GETDATE(), GETDATE())
+      INSERT INTO sg.LQ_CSS_staff_accounts
+      (firstName, middleInitial, lastName, email, phone, roleId, statusId, passwordHash, createdAt, updatedAt)
+      VALUES
+      (@firstName, @middleInitial, @lastName, @email, @phone, @roleId, @statusId, @passwordHash, GETDATE(), GETDATE())
     `);
 };
 

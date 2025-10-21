@@ -8,7 +8,7 @@ const router = express.Router();
 router.get("/", staffAuth, Controller.getAllStaff);
 
 // POST /api/staff/register
-router.post("/register", staffAuth, Controller.staffRegister);
+router.post("/register", Controller.staffRegister);
 
 // POST /api/staff/login
 router.post("/login", Controller.staffLogin);
@@ -20,6 +20,6 @@ router.get("/:staffID", staffAuth, Controller.getStaffByID);
 router.delete("/:staffID", staffAuth, Controller.deleteStaff);
 
 // Update staff information (role-based validation)
-router.put("/update", staffAuth, Controller.updateStaff);
+router.put("/:staffID", staffAuth, Controller.updateStaff);
 
 export default router;
