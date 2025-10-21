@@ -2,6 +2,7 @@
 import * as Package from "../models/fnb_package_model.js";
 import { success, error } from "../utils/response_helper.js";
 
+// ----------------------GET-------------------------
 // Get client + package info using QR PIN
 export const getClientPackageByPin = async (req, res) => {
   try {
@@ -42,6 +43,7 @@ export const getClientPackageByPin = async (req, res) => {
     return error(res, "An error occured while fetching client package info");
   }
 };
+
 // Get all menu items for a specific package ID
 export const getMenuByPackage = async (req, res) => {
   try{
@@ -60,3 +62,9 @@ export const getMenuByPackage = async (req, res) => {
     return error(res, "An error occuredwhile fetching the package menu");
   }
 };
+
+// ----------------------POST-------------------------
+
+// ----------------------PUT-------------------------
+
+// ----------------------DELETE-------------------------

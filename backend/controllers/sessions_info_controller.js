@@ -4,6 +4,9 @@ import * as Clients from "../models/clients_info_model.js";
 import { success, error } from "../utils/response_helper.js";
 import { generateQrDataUrl } from "../utils/qr_generator.js";
 
+// ----------------------GET-------------------------
+
+// ----------------------POST-------------------------
 // Client login
 export const clientLogin = async (req, res) => {
   try {
@@ -53,3 +56,7 @@ export const clientLogin = async (req, res) => {
     return error(res, e.message);
   }
 };
+// ----------------------PUT-------------------------
+
+// ----------------------DELETE-------------------------
+

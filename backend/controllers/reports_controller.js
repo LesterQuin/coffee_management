@@ -1,5 +1,6 @@
 import ReportsModel from "../models/reports_model.js";
 
+// ----------------------GET-------------------------
 export const getStatistics = async (req, res) => {
   try {
     const data = await ReportsModel.getOrderStatistics({});
@@ -9,3 +10,9 @@ export const getStatistics = async (req, res) => {
     res.status(500).json({ success: false, message: "Failed to load report" });
   }
 };
+
+// ----------------------POST-------------------------
+
+// ----------------------PUT-------------------------
+
+// ----------------------DELETE-------------------------

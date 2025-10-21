@@ -7,6 +7,7 @@ import { success, error } from "../utils/response_helper.js";
 
 dotenv.config();
 
+// ----------------------GET-------------------------
 // Get all staff members
 export const getAllStaff = async (req, res) => {
   try {
@@ -18,6 +19,19 @@ export const getAllStaff = async (req, res) => {
   }
 };
 
+// Get staff by ID
+export const getStaffByID = async (req, res) => {
+  const { staffID } = req.params;
+  try {
+    const staff = await Model.getStaffByID(staffID);
+    if (!staff) return res.status(404).json({ success: false, message: "Staff not found" });
+    return res.json({ success: true, data: staff });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ----------------------POST-------------------------
 // Staff registration
 export const staffRegister = async (req, res) => {
   try {
@@ -62,34 +76,7 @@ export const staffLogin = async (req, res) => {
   }
 };
 
-// Get staff by ID
-export const getStaffByID = async (req, res) => {
-  const { staffID } = req.params;
-  try {
-    const staff = await Model.getStaffByID(staffID);
-    if (!staff) return res.status(404).json({ success: false, message: "Staff not found" });
-    return res.json({ success: true, data: staff });
-  } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
-  }
-};
-
-// Delete staff by ID
-export const deleteStaff = async (req, res) => {
-  try {
-    const { staffID } = req.params;
-    if (!staffID) return res.status(400).json({ success: false, message: "Staff ID required" });
-
-    const deleted = await Model.deleteStaffModel(staffID);
-    if (!deleted) return res.status(404).json({ success: false, message: "Staff not found" });
-
-    res.json({ success: true, message: "Staff deleted successfully" });
-  } catch (err) {
-    console.error("Delete staff error:", err);
-    res.status(500).json({ success: false, message: "Server error" });
-  }
-};
-
+// ----------------------PUT-------------------------
 // Update staff (role-based validation)
 export const updateStaff = async (req, res) => {
   try {
@@ -123,5 +110,22 @@ export const updateStaff = async (req, res) => {
   } catch (err) {
     console.error("Update staff error:", err);
     return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ----------------------DELETE-------------------------
+// Delete staff by ID
+export const deleteStaff = async (req, res) => {
+  try {
+    const { staffID } = req.params;
+    if (!staffID) return res.status(400).json({ success: false, message: "Staff ID required" });
+
+    const deleted = await Model.deleteStaffModel(staffID);
+    if (!deleted) return res.status(404).json({ success: false, message: "Staff not found" });
+
+    res.json({ success: true, message: "Staff deleted successfully" });
+  } catch (err) {
+    console.error("Delete staff error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };

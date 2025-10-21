@@ -3,7 +3,7 @@ import { poolPromise } from "../config/db_config.js";
 import * as Model from "../models/chapel_info_model.js";
 import { success, error } from "../utils/response_helper.js";
 
-
+// ----------------------GET-------------------------
 // Get all chapels
 export const getAllChapels = async (req, res) => {
   try {
@@ -13,6 +13,7 @@ export const getAllChapels = async (req, res) => {
     return error(res, e.message);
   }
 };
+
 // Get all available chapels
 export const listAvailable = async (req, res) => {
   try {
@@ -22,6 +23,20 @@ export const listAvailable = async (req, res) => {
     return error(res, e.message);
   }
 };
+
+// get id package by chapel
+export const listPackagesByChapel = async (req, res) => {
+  const chapelID = parseInt(req.params.chapelID);
+  try{
+    const packages = await PackageModel.getPackageByChapel(chapelID);
+    res.json({ data: packages });
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ message: "Failed to fetch packages "});
+  }
+};
+
+// ----------------------POST-------------------------
 // Create a new chapel room
 export const create = async (req, res) => {
   try {
@@ -38,6 +53,8 @@ export const create = async (req, res) => {
     return error(res, e.message);
   }
 };
+
+// ----------------------PUT-------------------------
 // Set the status of a chapel room
 export const setStatus = async (req, res) => {
   try {
@@ -48,6 +65,7 @@ export const setStatus = async (req, res) => {
     return error(res, e.message);
   }
 };
+
 // update chapel details
 export const updateChapel = async(req, res) => {
   const { chapelID } = req.params;
@@ -68,6 +86,8 @@ export const updateChapel = async(req, res) => {
     return res.status(500).json({ success: false, message: e.message });
   }
 };
+
+// ----------------------DELETE-------------------------
 // delete
 export const deleteChapel = async (req, res) => {
   const { chapelID } = req.params;
@@ -78,16 +98,5 @@ export const deleteChapel = async (req, res) => {
   } catch (err) {
     console.error("Delete chapel error:", err);
     res.status(500).json({ success: false, message: "Server error" });
-  }
-};
-// get id package by chapel
-export const listPackagesByChapel = async (req, res) => {
-  const chapelID = parseInt(req.params.chapelID);
-  try{
-    const packages = await PackageModel.getPackageByChapel(chapelID);
-    res.json({ data: packages });
-  } catch (err) {
-    console.log(err);
-    res.status(500).json({ message: "Failed to fetch packages "});
   }
 };

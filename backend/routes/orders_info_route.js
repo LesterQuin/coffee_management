@@ -5,13 +5,12 @@ import { staffAuth } from "../middleware/auth_middleware.js";
 const router = express.Router();
 
 // ----------------------GET-------------------------
-// Order routes
-router.post("/place", staffAuth, Controller.placeOrder);
 // Get all orders for a client
 router.get("/client/:clientID", staffAuth, Controller.getOrders);
 
 // ----------------------POST-------------------------
-
+// Order routes
+router.post("/place", staffAuth, Controller.placeOrder);
 
 // ----------------------PUT-------------------------
 // Update order status

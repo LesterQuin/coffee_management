@@ -2,6 +2,19 @@
 import * as Model from "../models/orders_info_model.js";
 import { success, error } from "../utils/response_helper.js";
 
+// ----------------------GET-------------------------
+// Get all orders for a client
+export const getOrders = async (req, res) => {
+  try {
+    const { clientID } = req.params;
+    const orders = await Model.getClientOrders(clientID);
+    return success(res, orders, "Client orders retrieved");
+  } catch (e) {
+    return error(res, e.message);
+  }
+};
+
+// ----------------------POST-------------------------
 // Place a new order
 export const placeOrder = async (req, res) => {
   try {
@@ -12,6 +25,8 @@ export const placeOrder = async (req, res) => {
     return error(res, e.message);
   }
 };
+
+// ----------------------PUT-------------------------
 // Update order status
 export const updateStatus = async (req, res) => {
   try {
@@ -22,6 +37,7 @@ export const updateStatus = async (req, res) => {
     return error(res, e.message);
   }
 };
+
 // Update order status
 export const updateOrderStatus = async (req, res) => {
   try {
@@ -38,13 +54,5 @@ export const updateOrderStatus = async (req, res) => {
     return error(res, e.message);
   }
 };
-// Get all orders for a client
-export const getOrders = async (req, res) => {
-  try {
-    const { clientID } = req.params;
-    const orders = await Model.getClientOrders(clientID);
-    return success(res, orders, "Client orders retrieved");
-  } catch (e) {
-    return error(res, e.message);
-  }
-};
+
+// ----------------------DELETE-------------------------
