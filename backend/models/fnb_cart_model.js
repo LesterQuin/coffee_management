@@ -1,6 +1,85 @@
 // models/fnb_cart_model.js
 import { poolPromise, sql } from "../config/db_config.js";
 
+// ----------------------GET-------------------------
+// View cart
+export const viewCart = async (clientID) => {
+  const pool = await poolPromise;
+  const res = await pool.request()
+    .input("clientID", sql.Int, clientID)
+    .query(`
+      SELECT i.cartItemID, i.productID, i.quantity, i.size, p.productName, p.price, (i.quantity * p.price) AS total
+      FROM sg.LQ_CSS_fnb_cart_items i
+      INNER JOIN sg.LQ_CSS_fnb_cart c ON i.cartID = c.cartID
+      INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
+      WHERE c.clientID = @clientID
+    `);
+  return res.recordset;
+};
+
+// View all
+export const viewAllCarts = async () => {
+  const pool = await poolPromise;
+  const res = await pool.request()
+    .query(`
+      SELECT c.cartID, c.clientID, ci.deceasedName, ci.registeredBy AS customerName,
+             ci.mobileNo AS customerNumber,
+             i.cartItemID, i.productID, i.quantity, i.size, p.productName, p.price,
+             (i.quantity * p.price) AS total
+      FROM sg.LQ_CSS_fnb_cart c
+      INNER JOIN sg.LQ_CSS_client_info ci ON c.clientID = ci.clientID
+      INNER JOIN sg.LQ_CSS_fnb_cart_items i ON i.cartID = c.cartID
+      INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
+      ORDER BY c.cartID, i.cartItemID
+    `);
+
+  return res.recordset;
+};
+
+// get order
+export const getOrderReceipt = async (orderID) => {
+  const pool = await poolPromise;
+
+  // 1️⃣ Fetch main order info + client + chapel + package
+  const orderRes = await pool.request()
+    .input("orderID", sql.Int, orderID)
+    .query(`
+      SELECT 
+        o.orderID,
+        c.deceasedName,
+        cr.chapelName AS chapel,
+        fp.packageName AS package,
+        c.registeredBy AS customerName,
+        c.mobileNo AS customerNumber,
+        o.status,
+        o.createdAt AS orderDateTime
+      FROM sg.LQ_CSS_fnb_orders o
+      INNER JOIN sg.LQ_CSS_client_info c ON o.clientID = c.clientID
+      LEFT JOIN sg.LQ_CSS_chapel_rooms cr ON c.chapelID = cr.chapelID
+      LEFT JOIN sg.LQ_CSS_fnb_packages fp ON c.packageNo = fp.packageID
+      WHERE o.orderID = @orderID
+    `);
+
+  const order = orderRes.recordset?.[0];
+  if (!order) return null;
+
+  // 2️⃣ Fetch order items
+  const itemsRes = await pool.request()
+    .input("orderID", sql.Int, orderID)
+    .query(`
+      SELECT p.productName AS description, oi.quantity AS qty, p.price AS amount, oi.size
+      FROM sg.LQ_CSS_fnb_order_items oi
+      INNER JOIN sg.LQ_CSS_fnb_products p ON oi.productID = p.productID
+      WHERE oi.orderID = @orderID
+    `);
+
+  const items = itemsRes.recordset || [];
+  const total = items.reduce((sum, i) => sum + i.qty * i.amount, 0);
+
+  return { ...order, items, total };
+};
+
+// ----------------------POST-------------------------
 // Add item to cart
 export const addItem = async (clientID, productID, quantity, size) => {
   const pool = await poolPromise;
@@ -30,99 +109,6 @@ export const addItem = async (clientID, productID, quantity, size) => {
     `);
 
   return true;
-};
-
-// Remove item from cart
-export const removeItem = async (clientID, productID) => {
-  const pool = await poolPromise;
-  await pool.request()
-    .input("clientID", sql.Int, clientID)
-    .input("productID", sql.Int, productID)
-    .query(`
-      DELETE FROM sg.LQ_CSS_fnb_cart_items
-      WHERE cartID = (SELECT cartID FROM sg.LQ_CSS_fnb_cart WHERE clientID = @clientID)
-        AND productID = @productID
-    `);
-  return true;
-};
-
-// Update item quantity in cart
-export const updateItem = async (clientID, productID, quantity, size) => {
-  const pool = await poolPromise;
-  
-  try {
-    const resCart = await pool.request()
-      .input("clientID", sql.Int, clientID)
-      .query("SELECT cartID FROM sg.LQ_CSS_fnb_cart WHERE clientID = @clientID");
-
-    const cartID = resCart.recordset[0]?.cartID;
-    if (!cartID){
-      throw new Error("Cart not found for this client");      
-    }
-
-    const resItem = await pool.request()
-      .input("cartID", sql.Int, cartID)
-      .input("productID", sql.Int, productID)
-      .input("size", sql.NVarChar(50), size)
-      .query(`
-        SELECT cartItemID
-        FROM sg.LQ_CSS_fnb_cart_items
-        WHERE cartID = @cartID and productID = @productID AND size = @size
-        `);
-
-      if (resItem.recordset.length === 0) {
-        throw new Error("Item not found in cart");
-      }
-
-      await pool.request()
-        .input("cartID", sql.Int, cartID)
-        .input("productID", sql.Int, productID)
-        .input("quantity", sql.Int, quantity)
-        .input("size", sql.NVarChar(50), size)
-        .query(`
-          UPDATE sg.LQ_CSS_fnb_cart_items
-          SET quantity = @quantity
-          WHERE cartID = @cartID AND productID = @productID AND size = @size
-          `);
-
-      return { message: "Cart item updated successfully" };
-  } catch (error) {
-    throw new Error(error.message);
-  }
-};
-
-// View cart
-export const viewCart = async (clientID) => {
-  const pool = await poolPromise;
-  const res = await pool.request()
-    .input("clientID", sql.Int, clientID)
-    .query(`
-      SELECT i.cartItemID, i.productID, i.quantity, i.size, p.productName, p.price, (i.quantity * p.price) AS total
-      FROM sg.LQ_CSS_fnb_cart_items i
-      INNER JOIN sg.LQ_CSS_fnb_cart c ON i.cartID = c.cartID
-      INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
-      WHERE c.clientID = @clientID
-    `);
-  return res.recordset;
-};
-
-// view all
-export const viewAllCarts = async () => {
-  const pool = await poolPromise;
-  const res = await pool.request()
-    .query(`
-      SELECT c.cartID, c.clientID, ci.deceasedName, ci.registeredBy AS customerName,
-             ci.mobileNo AS customerNumber,
-             i.cartItemID, i.productID, i.quantity, i.size, p.productName, p.price,
-             (i.quantity * p.price) AS total
-      FROM sg.LQ_CSS_fnb_cart c
-      INNER JOIN sg.LQ_CSS_client_info ci ON c.clientID = ci.clientID
-      INNER JOIN sg.LQ_CSS_fnb_cart_items i ON i.cartID = c.cartID
-      INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
-      ORDER BY c.cartID, i.cartItemID
-    `);
-
-  return res.recordset;
 };
 
 // Checkout cart → create order
@@ -183,45 +169,63 @@ export const checkout = async (clientID, paymentType, staffID) => {
   return receipt; // { orderID, totalAmount }
 };
 
-// get order
-export const getOrderReceipt = async (orderID) => {
+// ----------------------PUT-------------------------
+// Update item quantity in cart
+export const updateItem = async (clientID, productID, quantity, size) => {
   const pool = await poolPromise;
+  
+  try {
+    const resCart = await pool.request()
+      .input("clientID", sql.Int, clientID)
+      .query("SELECT cartID FROM sg.LQ_CSS_fnb_cart WHERE clientID = @clientID");
 
-  // 1️⃣ Fetch main order info + client + chapel + package
-  const orderRes = await pool.request()
-    .input("orderID", sql.Int, orderID)
+    const cartID = resCart.recordset[0]?.cartID;
+    if (!cartID){
+      throw new Error("Cart not found for this client");      
+    }
+
+    const resItem = await pool.request()
+      .input("cartID", sql.Int, cartID)
+      .input("productID", sql.Int, productID)
+      .input("size", sql.NVarChar(50), size)
+      .query(`
+        SELECT cartItemID
+        FROM sg.LQ_CSS_fnb_cart_items
+        WHERE cartID = @cartID and productID = @productID AND size = @size
+        `);
+
+      if (resItem.recordset.length === 0) {
+        throw new Error("Item not found in cart");
+      }
+
+      await pool.request()
+        .input("cartID", sql.Int, cartID)
+        .input("productID", sql.Int, productID)
+        .input("quantity", sql.Int, quantity)
+        .input("size", sql.NVarChar(50), size)
+        .query(`
+          UPDATE sg.LQ_CSS_fnb_cart_items
+          SET quantity = @quantity
+          WHERE cartID = @cartID AND productID = @productID AND size = @size
+          `);
+
+      return { message: "Cart item updated successfully" };
+  } catch (error) {
+    throw new Error(error.message);
+  }
+};
+
+// ----------------------DELETE-------------------------
+// Remove item from cart
+export const removeItem = async (clientID, productID) => {
+  const pool = await poolPromise;
+  await pool.request()
+    .input("clientID", sql.Int, clientID)
+    .input("productID", sql.Int, productID)
     .query(`
-      SELECT 
-        o.orderID,
-        c.deceasedName,
-        cr.chapelName AS chapel,
-        fp.packageName AS package,
-        c.registeredBy AS customerName,
-        c.mobileNo AS customerNumber,
-        o.status,
-        o.createdAt AS orderDateTime
-      FROM sg.LQ_CSS_fnb_orders o
-      INNER JOIN sg.LQ_CSS_client_info c ON o.clientID = c.clientID
-      LEFT JOIN sg.LQ_CSS_chapel_rooms cr ON c.chapelID = cr.chapelID
-      LEFT JOIN sg.LQ_CSS_fnb_packages fp ON c.packageNo = fp.packageID
-      WHERE o.orderID = @orderID
+      DELETE FROM sg.LQ_CSS_fnb_cart_items
+      WHERE cartID = (SELECT cartID FROM sg.LQ_CSS_fnb_cart WHERE clientID = @clientID)
+        AND productID = @productID
     `);
-
-  const order = orderRes.recordset?.[0];
-  if (!order) return null;
-
-  // 2️⃣ Fetch order items
-  const itemsRes = await pool.request()
-    .input("orderID", sql.Int, orderID)
-    .query(`
-      SELECT p.productName AS description, oi.quantity AS qty, p.price AS amount, oi.size
-      FROM sg.LQ_CSS_fnb_order_items oi
-      INNER JOIN sg.LQ_CSS_fnb_products p ON oi.productID = p.productID
-      WHERE oi.orderID = @orderID
-    `);
-
-  const items = itemsRes.recordset || [];
-  const total = items.reduce((sum, i) => sum + i.qty * i.amount, 0);
-
-  return { ...order, items, total };
+  return true;
 };

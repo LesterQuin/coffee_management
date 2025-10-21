@@ -1,28 +1,7 @@
 // models/orders_info_model.js
 import { poolPromise, sql } from "../config/db_config.js";
 
-// Place an order (optional, you can skip if using cart checkout)
-export const placeOrder = async (clientID) => {
-  const pool = await poolPromise;
-  const res = await pool.request()
-    .input("clientID", sql.Int, clientID)
-    .execute("sg.LQ_CSS_fnb_place_order");
-  return res.recordset?.[0] || { orderID: null };
-};
-
-// Update order status
-export const updateOrderStatus = async (orderID, status) => {
-  const pool = await poolPromise;
-  await pool.request()
-    .input("orderID", sql.Int, orderID)
-    .input("status", sql.NVarChar, status)
-    .query(`
-      UPDATE sg.LQ_CSS_fnb_orders
-      SET status = @status, updatedAt = GETDATE()
-      WHERE orderID = @orderID
-    `);
-};
-
+// ----------------------GET-------------------------
 // Get all orders for a client (nested items)
 export const getClientOrders = async (clientID) => {
   const pool = await poolPromise;
@@ -63,3 +42,29 @@ export const getClientOrders = async (clientID) => {
 
   return nestedOrders;
 };
+
+// ----------------------POST-------------------------
+// Place an order (optional, you can skip if using cart checkout)
+export const placeOrder = async (clientID) => {
+  const pool = await poolPromise;
+  const res = await pool.request()
+    .input("clientID", sql.Int, clientID)
+    .execute("sg.LQ_CSS_fnb_place_order");
+  return res.recordset?.[0] || { orderID: null };
+};
+
+// ----------------------PUT-------------------------
+// Update order status
+export const updateOrderStatus = async (orderID, status) => {
+  const pool = await poolPromise;
+  await pool.request()
+    .input("orderID", sql.Int, orderID)
+    .input("status", sql.NVarChar, status)
+    .query(`
+      UPDATE sg.LQ_CSS_fnb_orders
+      SET status = @status, updatedAt = GETDATE()
+      WHERE orderID = @orderID
+    `);
+};
+
+// ----------------------DELETE-------------------------

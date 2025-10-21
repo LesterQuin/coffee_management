@@ -1,5 +1,6 @@
 import { poolPromise, sql } from "../config/db_config.js";
 
+// ----------------------GET-------------------------
 // Get all staff members
 export const getAllStaff = async () => {
   const pool = await poolPromise;
@@ -22,6 +23,16 @@ export const getStaffByEmail = async (email) => {
   return result.recordset[0];
 };
 
+// Get staff by ID
+export const getStaffByID = async (staffID) => {
+  const pool = await poolPromise;
+  const res = await pool.request()
+    .input("staffID", sql.Int, staffID)
+    .query("SELECT * FROM sg.LQ_CSS_staff_accounts WHERE staffID = @staffID");
+  return res.recordset[0];
+};
+
+// ----------------------POST-------------------------
 // Create a new staff member with status Active
 export const createStaff = async ({ firstName, middleInitial, lastName, email, phone, roleId, statusId, passwordHash }) => {
   const pool = await poolPromise;
@@ -55,24 +66,7 @@ export const createStaff = async ({ firstName, middleInitial, lastName, email, p
     `);
 };
 
-// Get staff by ID
-export const getStaffByID = async (staffID) => {
-  const pool = await poolPromise;
-  const res = await pool.request()
-    .input("staffID", sql.Int, staffID)
-    .query("SELECT * FROM sg.LQ_CSS_staff_accounts WHERE staffID = @staffID");
-  return res.recordset[0];
-};
-
-// Delete staff
-export const deleteStaffModel = async (staffID) => {
-  const pool = await poolPromise;
-  const res = await pool.request()
-    .input("staffID", sql.Int, staffID)
-    .query("DELETE FROM sg.LQ_CSS_staff_accounts WHERE staffID = @staffID");
-  return res.rowsAffected[0] > 0;
-};
-
+// ----------------------PUT-------------------------
 // Update staff with role-based validation
 export const updateStaff = async (staff, currentUserRole) => {
   if (!staff.staffID) throw new Error("staffID is required");
@@ -143,4 +137,14 @@ export const updateStaff = async (staff, currentUserRole) => {
 
   const result = await request.query(query);
   return result.rowsAffected[0] > 0;
+};
+
+// ----------------------DELETE-------------------------
+// Delete staff
+export const deleteStaffModel = async (staffID) => {
+  const pool = await poolPromise;
+  const res = await pool.request()
+    .input("staffID", sql.Int, staffID)
+    .query("DELETE FROM sg.LQ_CSS_staff_accounts WHERE staffID = @staffID");
+  return res.rowsAffected[0] > 0;
 };

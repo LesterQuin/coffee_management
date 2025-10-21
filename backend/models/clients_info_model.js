@@ -40,6 +40,7 @@ const mapClientRow = (r) => ({
   sessionExpires: r.sessionExpires,
 });
 
+// ----------------------GET-------------------------
 // Get all client information
 export const getAllClient = async () => {
   const pool = await poolPromise;
@@ -134,23 +135,7 @@ export const getClientByPin = async (pin) => {
   return result.recordset[0] || null;
 };
 
-// Delete client by ID (hard delete chain: delete sessions then client)
-export const deleteClient = async (clientID) => {
-  const pool = await poolPromise;
-
-  // Delete sessions first (to avoid FK constraint issues)
-  await pool.request()
-    .input("clientID", sql.Int, clientID)
-    .query(`DELETE FROM sg.LQ_CSS_sessions_info WHERE clientID = @clientID`);
-
-  // Then delete client
-  const result = await pool.request()
-    .input("clientID", sql.Int, clientID)
-    .query(`DELETE FROM sg.LQ_CSS_client_info WHERE clientID = @clientID`);
-
-  return result.rowsAffected[0] > 0;
-};
-
+// ----------------------POST-------------------------
 // Register a new client and generate QR + session
 export const registerClientWithQR = async (client, userName) => {
   const pool = await poolPromise;
@@ -221,6 +206,29 @@ export const registerClientWithQR = async (client, userName) => {
   return { clientID, pin, qrDataUrl, sessionID };
 };
 
+// Raise client balance (adds amount to either packageBalance or additionalBalance)
+export const raiseBalance = async (clientID, amount, type = "package") => {
+  if (!clientID || isNaN(parseInt(clientID, 10))) throw new Error("Invalid clientID");
+  const pool = await poolPromise;
+  const numericAmount = parseFloat(amount);
+  if (isNaN(numericAmount)) throw new Error("Invalid amount");
+
+  const field = type === "additional" ? "additionalBalance" : "packageBalance";
+
+  const result = await pool.request()
+    .input("clientID", sql.Int, clientID)
+    .input("amount", sql.Decimal(18,2), numericAmount)
+    .query(`
+      UPDATE sg.LQ_CSS_client_info
+      SET ${field} = ISNULL(${field}, 0) + @amount, updatedAt = GETDATE()
+      WHERE clientID = @clientID
+    `);
+
+  return result.rowsAffected[0] > 0;
+};
+
+
+// ----------------------PUT-------------------------
 // Update client information
 export const updateClient = async (client) => {
   if (!client.clientID) throw new Error("clientID is required for update");
@@ -280,23 +288,20 @@ export const updateClient = async (client) => {
   return result.rowsAffected[0] > 0;
 };
 
-// Raise client balance (adds amount to either packageBalance or additionalBalance)
-export const raiseBalance = async (clientID, amount, type = "package") => {
-  if (!clientID || isNaN(parseInt(clientID, 10))) throw new Error("Invalid clientID");
+// ----------------------DELETE-------------------------
+// Delete client by ID (hard delete chain: delete sessions then client)
+export const deleteClient = async (clientID) => {
   const pool = await poolPromise;
-  const numericAmount = parseFloat(amount);
-  if (isNaN(numericAmount)) throw new Error("Invalid amount");
 
-  const field = type === "additional" ? "additionalBalance" : "packageBalance";
+  // Delete sessions first (to avoid FK constraint issues)
+  await pool.request()
+    .input("clientID", sql.Int, clientID)
+    .query(`DELETE FROM sg.LQ_CSS_sessions_info WHERE clientID = @clientID`);
 
+  // Then delete client
   const result = await pool.request()
     .input("clientID", sql.Int, clientID)
-    .input("amount", sql.Decimal(18,2), numericAmount)
-    .query(`
-      UPDATE sg.LQ_CSS_client_info
-      SET ${field} = ISNULL(${field}, 0) + @amount, updatedAt = GETDATE()
-      WHERE clientID = @clientID
-    `);
+    .query(`DELETE FROM sg.LQ_CSS_client_info WHERE clientID = @clientID`);
 
   return result.rowsAffected[0] > 0;
 };

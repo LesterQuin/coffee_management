@@ -1,6 +1,7 @@
 // models/chapel_info_model.js
 import { poolPromise, sql } from "../config/db_config.js";
 
+// ----------------------GET-------------------------
 // Get all chapel rooms
 export const getAllChapels = async () => {
   const pool = await poolPromise;
@@ -22,6 +23,15 @@ export const getAvailableChapels = async () => {
   return result.recordset;
 };
 
+// Get ID chapel by packages
+export const getPackageByChapel = async (chapelID) => {
+  const pool = await poolPromise;
+  const result = await pool.request()
+    .input("chapelID", sql.Int, chapelID)
+    .query("SELECT * FROM sg.LQ_CSS_packages WHERE chapelID = @chapelID");
+  return result.recordset;
+};
+// ----------------------POST-------------------------
 // Create a new chapel room
 export const createChapel = async (chapelName, description, status= "Available") => {
   const pool = await poolPromise;
@@ -36,6 +46,7 @@ export const createChapel = async (chapelName, description, status= "Available")
   return true;
 };
 
+// ----------------------PUT-------------------------
 // Update chapel room status via stored procedure
 export const setChapelStatus = async (chapelID, status) => {
   const pool = await poolPromise;
@@ -45,7 +56,8 @@ export const setChapelStatus = async (chapelID, status) => {
     .execute("sg.LQ_CSS_chapel_set_status");
   return true;
 };
-//
+
+// Update chapel
 export const updateChapel = async (chapelID, chapelName, description, status) => {
   const pool = await poolPromise;
 
@@ -76,21 +88,12 @@ export const updateChapel = async (chapelID, chapelName, description, status) =>
     throw err;
   }
 };
-
-// Delete
+// ----------------------DELETE-------------------------
+// Delete chapel
 export const deleteChapel = async (chapelID) => {
   const pool = await poolPromise;
   const res = await pool.request()
     .input("chapelID", sql.Int, chapelID)
     .query("DELETE FROM sg.LQ_CSS_chapel_rooms WHERE chapelID = @chapelID");
   return res.rowsAffected[0] > 0;
-};
-
-// get id chapel by packages
-export const getPackageByChapel = async (chapelID) => {
-  const pool = await poolPromise;
-  const result = await pool.request()
-    .input("chapelID", sql.Int, chapelID)
-    .query("SELECT * FROM sg.LQ_CSS_packages WHERE chapelID = @chapelID");
-  return result.recordset;
 };
