@@ -35,14 +35,24 @@ export const getStaffByID = async (req, res) => {
 // Staff registration
 export const staffRegister = async (req, res) => {
   try {
-    const { firstName, middleInitial, lastName, email, phone, roleId, password } = req.body;
+    const { firstName, middleInitial, lastName, email, phone, roleId, password, statusId } = req.body;
 
-    if (!firstName || !lastName || !email || !password || !roleId) {
-      return error(res, "Missing required fields: firstName, lastName, email, password, or roleId", 400);
+    if (!firstName || !lastName || !email || !password || !roleId || !statusId) {
+      return error(res, "Missing required fields: firstName, lastName, email, password, roleId, or statusId", 400);
     }
 
     const hash = await bcrypt.hash(password, 10);
-    await Model.createStaff({ firstName, middleInitial, lastName, email, phone, roleId, statusId, passwordHash: hash });
+
+    await Model.createStaff({
+      firstName,
+      middleInitial: middleInitial || null,
+      lastName,
+      email,
+      phone: phone || null,
+      roleId,
+      statusId,
+      passwordHash: hash
+    });
 
     return success(res, null, "Staff created successfully.");
   } catch (e) {
@@ -50,25 +60,27 @@ export const staffRegister = async (req, res) => {
   }
 };
 
-// Staff login
+// ----------------------POST LOGIN-------------------------
 export const staffLogin = async (req, res) => {
   try {
     const { email, password } = req.body;
     const staff = await Model.getStaffByEmail(email);
     if (!staff) return error(res, "Invalid credentials", 400);
-    
+
     const ok = await bcrypt.compare(password, staff.passwordHash);
     if (!ok) return error(res, "Invalid credentials", 400);
-    
+
     const token = jwt.sign(
       {
         staffID: staff.staffID,
         email: staff.email,
-        role: staff.role,
+        roleId: staff.roleId,
+        statusId: staff.statusId
       },
       process.env.JWT_SECRET,
       { expiresIn: "12h" }
     );
+
     const { passwordHash, ...staffData } = staff;
     return success(res, { token, staff: staffData }, "Login Successful");
   } catch (e) {
@@ -77,31 +89,17 @@ export const staffLogin = async (req, res) => {
 };
 
 // ----------------------PUT-------------------------
-// Update staff (role-based validation)
+// Update staff
 export const updateStaff = async (req, res) => {
   try {
     const { staffID } = req.params;
-    const { roleId, ...fieldsToUpdate } = req.body;
+    const updateData = req.body;
 
-    if (Object.keys(fieldsToUpdate).length === 0 && !roleId)
+    if (!staffID) return res.status(400).json({ success: false, message: "Staff ID required" });
+    if (!updateData || Object.keys(updateData).length === 0)
       return res.status(400).json({ success: false, message: "No fields provided to update" });
 
-    const currentUserRole = req.user.role;
-
-    // If roleId is provided, fetch the role name
-    if (roleId !== undefined) {
-      const pool = await poolPromise;
-      const roleRes = await pool.request()
-        .input("roleId", sql.Int, roleId)
-        .query("SELECT role FROM sg.LQ_CSS_roles WHERE roledId = @roleId");
-
-      if (!roleRes.recordset[0])
-        return res.status(400).json({ success: false, message: `Invalid roleId: ${roleId}` });
-
-      fieldsToUpdate.role = roleRes.recordset[0].role;
-    }
-
-    const updated = await Model.updateStaff({ staffID: parseInt(staffID), ...fieldsToUpdate }, currentUserRole);
+    const updated = await Model.updateStaff({ staffID: parseInt(staffID), ...updateData });
 
     if (!updated)
       return res.status(404).json({ success: false, message: "Staff not found or no changes applied" });

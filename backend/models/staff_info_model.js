@@ -7,7 +7,7 @@ export const getAllStaff = async () => {
   const result = await pool
     .request()
     .query(`
-      SELECT staffID, firstName, middleInitial, lastName, email, phone, role, status, createdAt, updatedAt
+      SELECT staffID, firstName, middleInitial, lastName, email, roleId, statusId, createdAt, updatedAt, passwordHash
       FROM sg.LQ_CSS_staff_accounts
     `);
   return result.recordset;
@@ -19,7 +19,14 @@ export const getStaffByEmail = async (email) => {
   const result = await pool
     .request()
     .input("email", sql.NVarChar, email)
-    .query("SELECT * FROM sg.LQ_CSS_staff_accounts WHERE email = @email AND status = 'Active'");
+    .query(`
+      SELECT s.staffID, s.firstName, s.middleInitial, s.lastName, s.email, s.phone,
+             r.role AS role, st.status AS status, s.passwordHash, s.createdAt, s.updatedAt
+      FROM sg.LQ_CSS_staff_accounts s
+      INNER JOIN sg.LQ_CSS_roles r ON s.roleId = r.roledId
+      INNER JOIN sg.LQ_CSS_status st ON s.statusId = st.statusId
+      WHERE s.email = @email AND st.status = 'Active'
+    `);
   return result.recordset[0];
 };
 
@@ -33,8 +40,8 @@ export const getStaffByID = async (staffID) => {
 };
 
 // ----------------------POST-------------------------
-// Create a new staff member with status Active
-export const createStaff = async ({ firstName, middleInitial, lastName, email, phone, roleId, statusId, passwordHash }) => {
+// Create a new staff member
+export const createStaff = async ({ firstName, middleInitial, lastName, email, roleId, statusId, passwordHash }) => {
   const pool = await poolPromise;
 
   // Validate roleId exists
@@ -54,88 +61,72 @@ export const createStaff = async ({ firstName, middleInitial, lastName, email, p
     .input("middleInitial", sql.NVarChar, middleInitial)
     .input("lastName", sql.NVarChar, lastName)
     .input("email", sql.NVarChar, email)
-    .input("phone", sql.NVarChar, phone)
     .input("roleId", sql.Int, roleId)
     .input("statusId", sql.Int, statusId)
     .input("passwordHash", sql.NVarChar, passwordHash)
     .query(`
       INSERT INTO sg.LQ_CSS_staff_accounts
-      (firstName, middleInitial, lastName, email, phone, roleId, statusId, passwordHash, createdAt, updatedAt)
+      (firstName, middleInitial, lastName, email, roleId, statusId, passwordHash, createdAt, updatedAt)
       VALUES
-      (@firstName, @middleInitial, @lastName, @email, @phone, @roleId, @statusId, @passwordHash, GETDATE(), GETDATE())
+      (@firstName, @middleInitial, @lastName, @email, @roleId, @statusId, @passwordHash, GETDATE(), GETDATE())
     `);
 };
 
 // ----------------------PUT-------------------------
-// Update staff with role-based validation
-export const updateStaff = async (staff, currentUserRole) => {
+// Update staff dynamically
+export const updateStaff = async (staff) => {
   if (!staff.staffID) throw new Error("staffID is required");
 
   const pool = await poolPromise;
-
-  // Fetch target staff
-  const targetRes = await pool.request()
-    .input("staffID", sql.Int, staff.staffID)
-    .query("SELECT role FROM sg.LQ_CSS_staff_accounts WHERE staffID = @staffID");
-
-  if (!targetRes.recordset[0]) throw new Error("Target staff not found");
-  const targetRole = targetRes.recordset[0].role;
-
-  // Role-based restrictions
-  if (staff.role || staff.status) {
-    if (currentUserRole === "Cashier") {
-      throw new Error("Cashier cannot update role or status");
-    } else if (currentUserRole === "Admin") {
-      if (targetRole !== "Cashier") throw new Error("Admin can only update staff with role Cashier");
-      if (staff.role) throw new Error("Admin cannot change role of staff");
-    }
-    // Super Admin: can update anything
-  }
-
   const request = pool.request().input("staffID", sql.Int, staff.staffID);
   const fields = [];
 
-  // Dynamic updates
-  if (staff.role !== undefined) {
-    // Validate role exists
-    const rolesResult = await pool.request().query("SELECT role FROM sg.LQ_CSS_roles");
-    const validRoles = rolesResult.recordset.map(r => r.role);
-    if (!validRoles.includes(staff.role)) throw new Error(`Invalid role: ${staff.role}`);
-    fields.push("role = @role");
-    request.input("role", sql.NVarChar, staff.role);
-  }
-
-  if (staff.status !== undefined) {
-    fields.push("status = @status");
-    request.input("status", sql.NVarChar, staff.status);
-  }
-
+  // Update names, email
   if (staff.firstName !== undefined) {
     fields.push("firstName = @firstName");
     request.input("firstName", sql.NVarChar, staff.firstName);
   }
-
   if (staff.middleInitial !== undefined) {
     fields.push("middleInitial = @middleInitial");
     request.input("middleInitial", sql.NVarChar, staff.middleInitial);
   }
-
   if (staff.lastName !== undefined) {
     fields.push("lastName = @lastName");
     request.input("lastName", sql.NVarChar, staff.lastName);
   }
+  if (staff.email !== undefined) {
+    fields.push("email = @email");
+    request.input("email", sql.NVarChar, staff.email);
+  }
 
-  if (staff.phone !== undefined) {
-    fields.push("phone = @phone");
-    request.input("phone", sql.NVarChar, staff.phone);
+  // Update roleId
+  if (staff.roleId !== undefined) {
+    const roleRes = await pool.request()
+      .input("roleId", sql.Int, staff.roleId)
+      .query("SELECT roledId FROM sg.LQ_CSS_roles WHERE roledId=@roleId");
+    if (!roleRes.recordset[0]) throw new Error(`Invalid roleId: ${staff.roleId}`);
+    fields.push("roleId = @roleId");
+    request.input("roleId", sql.Int, staff.roleId);
+  }
+
+  // Update statusId
+  if (staff.statusId !== undefined) {
+    const statusRes = await pool.request()
+      .input("statusId", sql.Int, staff.statusId)
+      .query("SELECT statusId FROM sg.LQ_CSS_status WHERE statusId=@statusId");
+    if (!statusRes.recordset[0]) throw new Error(`Invalid statusId: ${staff.statusId}`);
+    fields.push("statusId = @statusId");
+    request.input("statusId", sql.Int, staff.statusId);
   }
 
   if (fields.length === 0) throw new Error("No fields to update");
 
+  // Always update updatedAt
   fields.push("updatedAt = GETDATE()");
-  const query = `UPDATE sg.LQ_CSS_staff_accounts SET ${fields.join(", ")} WHERE staffID = @staffID`;
 
+  const query = `UPDATE sg.LQ_CSS_staff_accounts SET ${fields.join(", ")} WHERE staffID = @staffID`;
   const result = await request.query(query);
+
   return result.rowsAffected[0] > 0;
 };
 
