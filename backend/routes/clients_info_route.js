@@ -3,21 +3,24 @@ import express from "express";
 import * as Controller from "../controllers/clients_info_controller.js";
 import { staffAuth } from "../middleware/auth_middleware.js";
 const router = express.Router();
-
+// ----------------------GET-------------------------
 // Get all clients
 router.get("/", staffAuth, Controller.getAllClients);
-// Register a new client
-router.post("/register", staffAuth, Controller.registerClient);
-// Update client information
-router.put("/update", staffAuth, Controller.update);
-// Raise client balance
-router.put("/raise-balance", staffAuth, Controller.raiseBalance);
-// Client login
-router.post("/login", Controller.clientLogin);
-// Get client by ID
-router.get("/:clientID", staffAuth, Controller.getClientById);
 // Get client by PIN
 router.get("/pin/:pin", staffAuth, Controller.getClientByPin);
+// Get client by ID
+router.get("/:clientID", staffAuth, Controller.getClientById);
+// ----------------------POST-------------------------
+// Register a new client
+router.post("/register", staffAuth, Controller.registerClient);
+// Client login
+router.post("/login", Controller.clientLogin);
+// ----------------------PUT-------------------------
+// Update client information
+router.put("/:clientID", staffAuth, Controller.update);
+// Raise client balance
+router.put("/:clientID/balance", staffAuth, Controller.raiseBalance);
+// ----------------------DELETE-------------------------
 // Delete client by ID
 router.delete("/:clientID", staffAuth, Controller.deleteClient);
 

@@ -32,38 +32,43 @@ export const registerClient = async (req, res) => {
 // Update client information
 export const update = async (req, res) => {
   try {
-    const body = req.body || {}; // fallback if req.body is undefined
-    const { clientID, ...fieldsToUpdate } = body;
+    const clientID = req.params.clientID;
+    const fieldsToUpdate = req.body || {};
 
-    if (!clientID) {
-      return res.status(400).json({ success: false, message: "clientID is required for update" });
+    if (!clientID){
+      return res.status(400).json({success: false, message: "ClientID is required in params" });
     }
 
-    if (Object.keys(fieldsToUpdate).length === 0) {
-      return res.status(400).json({ success: false, message: "No fields provided to update" });
+    if (Object.keys(fieldsToUpdate).length === 0){
+      return res.status(400).json({success: false, message: "No fields provided to update"});
     }
 
-    // Call the model function to update dynamically
-    const updated = await Model.updateClient({ clientID, ...fieldsToUpdate });
+    const updated = await Model.updateClient({ clientID, ...fieldsToUpdate});
 
-    if (!updated) {
-      return res.status(404).json({ success: false, message: "Client not found or no changes applied" });
+    if(!updated){
+      return res.status(400).json({success: false, message: "Client not found or no changes applied"});
     }
 
-    return res.json({ success: true, message: "Client updated successfully" });
+    return res.json({success: true, message: "Client updated successfully"});
   } catch (e) {
     console.error("Update Client Error:", e);
-    return res.status(500).json({ success: false, message: e.message || "Server error" });
+    return res.status(500).json({success: false, message: e.message || "Server error"});
   }
 };
 
 // Raise client balance
 export const raiseBalance = async (req, res) => {
   try {
-    const { clientID, amount, type } = req.body;
+    const clientID = req.params.clientID;
+    const { amount, type } = req.body;
+
+    if (!clientID) return error(res, "ClientID is required in params", 404);
+    if (!amount) return error(res, "Aomunt is required", 400);
+
     await Model.raiseBalance(clientID, amount, type);
-    return success(res, null, "Balance updated");
+    return success(res, null, "Balance updated successfully");
   } catch (e) {
+    console.error("Raise Balance Error:", e);
     return error(res, e.message);
   }
 };

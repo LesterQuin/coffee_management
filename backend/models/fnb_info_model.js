@@ -101,30 +101,42 @@ export const createProduct = async (product) => {
 
 export const updateProduct = async (productID, product) => {
   const pool = await poolPromise;
+  const request = pool.request().input("productID", sql.Int, productID);
 
-  let query = `
-    UPDATE sg.LQ_CSS_fnb_products
-    SET categoryID=@categoryID, productName=@productName, description=@description,
-        price=@price, size=@size, isAvailable=@isAvailable, updatedAt=GETDATE()
-  `;
+  // Allowed fields for update
+  const fieldsMap = {
+    categoryID: sql.Int,
+    productName: sql.NVarChar(150),
+    description: sql.NVarChar(255),
+    price: sql.Decimal(18, 2),
+    size: sql.NVarChar(50),
+    isAvailable: sql.Bit,
+    image: sql.NVarChar(255),
+  };
 
-  if (product.image) {
-    query += `, image=@image`;
+  const fields = [];
+
+  for (const [key, type] of Object.entries(fieldsMap)) {
+    if (product[key] !== undefined) {
+      const value = type === sql.Decimal(18, 2) ? Number(product[key]) : product[key];
+      fields.push(`${key} = @${key}`);
+      request.input(key, type, value);
+    }
   }
 
-  query += ` WHERE productID=@productID`;
+  if (fields.length === 0) {
+    return false; // nothing to update
+  }
 
-  const result = await pool.request()
-    .input("productID", sql.Int, productID)
-    .input("categoryID", sql.Int, product.categoryID)
-    .input("productName", sql.NVarChar(150), product.productName)
-    .input("description", sql.NVarChar(255), product.description ?? null)
-    .input("price", sql.Decimal(18, 2), product.price)
-    .input("size", sql.NVarChar(50), product.size ?? null)
-    .input("isAvailable", sql.Bit, product.isAvailable ?? 1)
-    .input("image", sql.NVarChar(255), product.image ?? null)
-    .query(query);
+  fields.push("updatedAt = GETDATE()");
 
+  const query = `
+    UPDATE sg.LQ_CSS_fnb_products
+    SET ${fields.join(", ")}
+    WHERE productID = @productID
+  `;
+
+  const result = await request.query(query);
   return result.rowsAffected[0] > 0;
 };
 
