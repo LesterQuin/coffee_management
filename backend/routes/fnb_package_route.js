@@ -5,10 +5,16 @@ import { staffAuth } from "../middleware/auth_middleware.js";
 
 const router = express.Router();
 
+// ----------------------GET-------------------------
 // Scan QR (get client package + allowed menu)
 router.get("/scan/:pin", Package.getClientPackageByPin);
-
 // Get menu items by package ID
 router.get("/menu/:packageID", Package.getMenuByPackage);
+
+// ----------------------POST-------------------------
+
+// ----------------------PUT-------------------------
+
+// ----------------------DELETE-------------------------
 
 export default router;

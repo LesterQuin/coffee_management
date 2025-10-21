@@ -5,7 +5,14 @@ import { getStatistics } from "../controllers/reports_controller.js";
 
 const router = express.Router();
 
+// ----------------------GET-------------------------
 // Fetch order statistics
 router.get("/statistics", staffAuth, getStatistics);
+
+// ----------------------POST-------------------------
+
+// ----------------------PUT-------------------------
+
+// ----------------------DELETE-------------------------
 
 export default router;
