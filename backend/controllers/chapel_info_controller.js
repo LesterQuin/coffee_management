@@ -40,14 +40,13 @@ export const listPackagesByChapel = async (req, res) => {
 // Create a new chapel room
 export const create = async (req, res) => {
   try {
-    const { chapelName, description, status } = req.body;
+    const { chapelName, description } = req.body;
 
-    if (!chapelName || !status){
-      return error(res, "Both ChapelName and Status is required", 400);
+    if (!chapelName){
+      return error(res, "Both ChapelName is required", 400);
     }
-    const chapelStatus = status || "available";
 
-    await Model.createChapel(chapelName, description, chapelStatus);
+    await Model.createChapel(chapelName, description);
     return success(res, null, "Chapel created successfully");
   } catch (e) {
     return error(res, e.message);
@@ -55,27 +54,16 @@ export const create = async (req, res) => {
 };
 
 // ----------------------PUT-------------------------
-// Set the status of a chapel room
-export const setStatus = async (req, res) => {
-  try {
-    const { chapelID, status } = req.body;
-    await Model.setChapelStatus(chapelID, status);
-    return success(res, null, "Chapel status updated");
-  } catch (e) {
-    return error(res, e.message);
-  }
-};
-
 // update chapel details
 export const updateChapel = async(req, res) => {
   const { chapelID } = req.params;
-  const { chapelName, description, status } = req.body;
+  const { chapelName, description } = req.body;
 
   console.log("Updating chapel ID:", chapelID);
-  console.log("Payload:", { chapelName, description, status });
+  console.log("Payload:", { chapelName, description });
 
   try {
-    const updated = await Model.updateChapel(chapelID, chapelName, description, status);
+    const updated = await Model.updateChapel(chapelID, chapelName, description);
 
     if (!updated) {
       return res.status(404).json({ success: false, message: "Chapel not found or no fields to update" });

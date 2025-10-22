@@ -18,7 +18,7 @@ router.post("/", staffAuth, Controller.create);
 
 // ----------------------PUT-------------------------
 // Set the status of a chapel room
-router.put("/status/:chapelID", staffAuth, Controller.setStatus);
+//router.put("/status/:chapelID", staffAuth, Controller.setStatus);
 // update 
 router.put("/:chapelID", staffAuth, Controller.updateChapel)
 
