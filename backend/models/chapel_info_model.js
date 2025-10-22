@@ -6,7 +6,7 @@ import { poolPromise, sql } from "../config/db_config.js";
 export const getAllChapels = async () => {
   const pool = await poolPromise;
   const result = await pool.request().query(`
-    SELECT chapelID, chapelName, status, description, createdAt, updatedAt 
+    SELECT chapelID, chapelName, statusId, description, createdAt, updatedAt 
     FROM sg.LQ_CSS_chapel_rooms
   `);
   return result.recordset;
@@ -16,9 +16,9 @@ export const getAllChapels = async () => {
 export const getAvailableChapels = async () => {
   const pool = await poolPromise;
   const result = await pool.request().query(`
-    SELECT chapelID, chapelName, status, description 
+    SELECT chapelID, chapelName, statusId, description 
     FROM sg.LQ_CSS_chapel_rooms 
-    WHERE status = 'Active'
+    WHERE statusId = 'Active'
   `);
   return result.recordset;
 };
@@ -33,38 +33,38 @@ export const getPackageByChapel = async (chapelID) => {
 };
 // ----------------------POST-------------------------
 // Create a new chapel room
-export const createChapel = async (chapelName, description, status= "Available") => {
+export const createChapel = async (chapelName, description, statusId= "Available") => {
   const pool = await poolPromise;
   await pool.request()
     .input("chapelName", sql.NVarChar, chapelName)
     .input("description", sql.NVarChar, description ?? null)
-    .input("status", sql.NVarChar, status)
+    .input("statusId", sql.NVarChar, statusId)
     .query(`
-      INSERT INTO sg.LQ_CSS_chapel_rooms (chapelName, description, status, createdAt, updatedAt)
-      VALUES (@chapelName, @description, @status, GETDATE(), GETDATE())
+      INSERT INTO sg.LQ_CSS_chapel_rooms (chapelName, description, statusId, createdAt, updatedAt)
+      VALUES (@chapelName, @description, @statusId, GETDATE(), GETDATE())
     `);
   return true;
 };
 
 // ----------------------PUT-------------------------
 // Update chapel room status via stored procedure
-export const setChapelStatus = async (chapelID, status) => {
+export const setChapelStatus = async (chapelID, statusId) => {
   const pool = await poolPromise;
   await pool.request()
     .input("chapelID", sql.Int, chapelID)
-    .input("status", sql.NVarChar, status)
-    .execute("sg.LQ_CSS_chapel_set_status");
+    .input("statusId", sql.NVarChar, statusId)
+    .execute("sg.LQ_CSS_chapel_set_statusId");
   return true;
 };
 
 // Update chapel
-export const updateChapel = async (chapelID, chapelName, description, status) => {
+export const updateChapel = async (chapelID, chapelName, description, statusId) => {
   const pool = await poolPromise;
 
   const updates =[];
   if ( chapelName !== undefined) updates.push("chapelName = @chapelName");
   if ( description !== undefined) updates.push("description = @description");
-  if ( status !== undefined) updates.push("status = @status");
+  if ( statusId !== undefined) updates.push("statusId = @statusId");
 
   if (updates.length === 0) return false;
 
@@ -78,7 +78,7 @@ export const updateChapel = async (chapelID, chapelName, description, status) =>
 
   if (chapelName !== undefined) request.input("chapelName", sql.NVarChar, chapelName);
   if (description !== undefined) request.input("description", sql.NVarChar, description);
-  if (status !== undefined) request.input("status", sql.NVarChar, status);  
+  if (statusId !== undefined) request.input("statusId", sql.NVarChar, statusId);  
 
   try {
   const result = await request.query(query);
