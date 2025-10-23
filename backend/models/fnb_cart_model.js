@@ -8,7 +8,7 @@ export const viewCart = async (clientID) => {
   const res = await pool.request()
     .input("clientID", sql.Int, clientID)
     .query(`
-      SELECT i.cartItemID, i.productID, i.quantity, i.size, p.productName, p.price, (i.quantity * p.price) AS total
+      SELECT i.cartItemID, i.productID, i.quantity, i.sizeId, p.productName, p.price, (i.quantity * p.price) AS total
       FROM sg.LQ_CSS_fnb_cart_items i
       INNER JOIN sg.LQ_CSS_fnb_cart c ON i.cartID = c.cartID
       INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
@@ -24,7 +24,7 @@ export const viewAllCarts = async () => {
     .query(`
       SELECT c.cartID, c.clientID, ci.deceasedName, ci.registeredBy AS customerName,
              ci.mobileNo AS customerNumber,
-             i.cartItemID, i.productID, i.quantity, i.size, p.productName, p.price,
+             i.cartItemID, i.productID, i.quantity, i.sizeId, p.productName, p.price,
              (i.quantity * p.price) AS total
       FROM sg.LQ_CSS_fnb_cart c
       INNER JOIN sg.LQ_CSS_client_info ci ON c.clientID = ci.clientID
@@ -67,7 +67,7 @@ export const getOrderReceipt = async (orderID) => {
   const itemsRes = await pool.request()
     .input("orderID", sql.Int, orderID)
     .query(`
-      SELECT p.productName AS description, oi.quantity AS qty, p.price AS amount, oi.size
+      SELECT p.productName AS description, oi.quantity AS qty, p.price AS amount, oi.sizeId
       FROM sg.LQ_CSS_fnb_order_items oi
       INNER JOIN sg.LQ_CSS_fnb_products p ON oi.productID = p.productID
       WHERE oi.orderID = @orderID
@@ -81,7 +81,7 @@ export const getOrderReceipt = async (orderID) => {
 
 // ----------------------POST-------------------------
 // Add item to cart
-export const addItem = async (clientID, productID, quantity, size) => {
+export const addItem = async (clientID, productID, quantity, sizeId) => {
   const pool = await poolPromise;
 
   let res = await pool.request()
@@ -100,12 +100,12 @@ export const addItem = async (clientID, productID, quantity, size) => {
     .input("cartID", sql.Int, cartID)
     .input("productID", sql.Int, productID)
     .input("quantity", sql.Int, quantity)
-    .input("size", sql.NVarChar(50), size)
+    .input("sizeId", sql.NVarChar(50), sizeId)
     .query(`
-      IF EXISTS (SELECT 1 FROM sg.LQ_CSS_fnb_cart_items WHERE cartID = @cartID AND productID = @productID AND size = @size)
-        UPDATE sg.LQ_CSS_fnb_cart_items SET quantity = quantity + @quantity WHERE cartID = @cartID AND productID = @productID AND size = @size
+      IF EXISTS (SELECT 1 FROM sg.LQ_CSS_fnb_cart_items WHERE cartID = @cartID AND productID = @productID AND sizeId = @sizeId)
+        UPDATE sg.LQ_CSS_fnb_cart_items SET quantity = quantity + @quantity WHERE cartID = @cartID AND productID = @productID AND sizeId = @sizeId
       ELSE
-        INSERT INTO sg.LQ_CSS_fnb_cart_items (cartID, productID, quantity, size) VALUES (@cartID, @productID, @quantity, @size)
+        INSERT INTO sg.LQ_CSS_fnb_cart_items (cartID, productID, quantity, sizeId) VALUES (@cartID, @productID, @quantity, @sizeId)
     `);
 
   return true;
@@ -144,7 +144,7 @@ export const checkout = async (clientID, paymentType, staffID) => {
       SELECT p.productName AS description, 
               i.quantity AS qty, 
               p.price AS amount, 
-              i.size
+              i.sizeId
       FROM sg.LQ_CSS_fnb_order_items i
       INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
       WHERE i.orderID = @orderID
@@ -171,7 +171,7 @@ export const checkout = async (clientID, paymentType, staffID) => {
 
 // ----------------------PUT-------------------------
 // Update item quantity in cart
-export const updateItem = async (clientID, productID, quantity, size) => {
+export const updateItem = async (clientID, productID, quantity, sizeId) => {
   const pool = await poolPromise;
   
   try {
@@ -187,11 +187,11 @@ export const updateItem = async (clientID, productID, quantity, size) => {
     const resItem = await pool.request()
       .input("cartID", sql.Int, cartID)
       .input("productID", sql.Int, productID)
-      .input("size", sql.NVarChar(50), size)
+      .input("sizeId", sql.NVarChar(50), sizeId)
       .query(`
         SELECT cartItemID
         FROM sg.LQ_CSS_fnb_cart_items
-        WHERE cartID = @cartID and productID = @productID AND size = @size
+        WHERE cartID = @cartID and productID = @productID AND sizeId = @sizeId
         `);
 
       if (resItem.recordset.length === 0) {
@@ -202,11 +202,11 @@ export const updateItem = async (clientID, productID, quantity, size) => {
         .input("cartID", sql.Int, cartID)
         .input("productID", sql.Int, productID)
         .input("quantity", sql.Int, quantity)
-        .input("size", sql.NVarChar(50), size)
+        .input("sizeId", sql.NVarChar(50), sizeId)
         .query(`
           UPDATE sg.LQ_CSS_fnb_cart_items
           SET quantity = @quantity
-          WHERE cartID = @cartID AND productID = @productID AND size = @size
+          WHERE cartID = @cartID AND productID = @productID AND sizeId = @sizeId
           `);
 
       return { message: "Cart item updated successfully" };

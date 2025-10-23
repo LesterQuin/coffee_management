@@ -27,7 +27,7 @@ export const viewAllCarts = async (req, res) => {
         productID: item.productID,
         description: item.productName,
         qty: item.quantity,
-        size: item.size,
+        sizeId: item.sizeId,
         amount: item.price,
         total: item.total
       });
@@ -65,13 +65,13 @@ export const viewCart = async (req, res) => {
 // Add item to cart
 export const addItem = async (req, res) => {
   try {
-    const { clientID, productID, quantity, size } = req.body;
+    const { clientID, productID, quantity, sizeId } = req.body;
 
-    if (!clientID || !productID || !quantity || !size) {
-      return error(res, "Missing required fields: clientID, productID, quantity, size", 400);
+    if (!clientID || !productID || !quantity || !sizeId) {
+      return error(res, "Missing required fields: clientID, productID, quantity, sizeId", 400);
     }
 
-    await Model.addItem(clientID, productID, quantity, size);
+    await Model.addItem(clientID, productID, quantity, sizeId);
     return success(res, null, "Item added to cart");
   } catch (e) {
     return error(res, e.message, 500);
@@ -102,13 +102,13 @@ export const checkout = async (req, res) => {
 // Update item quantity or size
 export const updateItem = async (req, res) => {
   try {
-    const { clientID, productID, quantity, size } = req.body;
+    const { clientID, productID, quantity, sizeId } = req.body;
 
-    if (!clientID || !productID || !quantity || !size) {
-      return error(res, "Missing required fields: clientID, productID, quantity, size", 400);
+    if (!clientID || !productID || !quantity || !sizeId) {
+      return error(res, "Missing required fields: clientID, productID, quantity, sizeId", 400);
     }
     
-    const result = await Model.updateItem(clientID, productID, quantity, size);
+    const result = await Model.updateItem(clientID, productID, quantity, sizeId);
     return success(res, null, "Cart item updated successfully");
   } catch (e) {
     return error(res, e.message, 500);

@@ -9,7 +9,7 @@ export const getClientOrders = async (clientID) => {
     .input("clientID", sql.Int, clientID)
     .query(`
       SELECT o.orderID, o.status, o.createdAt, o.updatedAt,
-             i.productID, i.quantity, i.size, p.productName, p.price
+             i.productID, i.quantity, i.sizeId, p.productName, p.price
       FROM sg.LQ_CSS_fnb_orders o
       INNER JOIN sg.LQ_CSS_fnb_order_items i ON o.orderID = i.orderID
       INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
@@ -34,7 +34,7 @@ export const getClientOrders = async (clientID) => {
       productID: row.productID,
       productName: row.productName,
       quantity: row.quantity,
-      size: row.size,
+      sizeId: row.sizeId,
       price: row.price,
       total: row.quantity * row.price
     });

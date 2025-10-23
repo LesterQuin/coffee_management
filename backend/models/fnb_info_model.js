@@ -49,7 +49,7 @@ export const deleteCategory = async (categoryID) => {
 export const getAllProducts = async () => {
   const pool = await poolPromise;
   const res = await pool.request().query(`
-    SELECT p.productID, p.productName, p.description, p.price, p.size, p.image, p.isAvailable,
+    SELECT p.productID, p.productName, p.description, p.price, p.sizeId, p.image, p.isAvailable,
            c.categoryName
     FROM sg.LQ_CSS_fnb_products p
     INNER JOIN sg.LQ_CSS_fnb_categories c ON p.categoryID = c.categoryID
@@ -67,7 +67,7 @@ export const getProductByCategory = async (categoryID) => {
         p.productName,
         p.description,
         p.price,
-        p.size,
+        p.sizeId,
         p.image,
         p.isAvailable,
         c.categoryID,
@@ -88,13 +88,13 @@ export const createProduct = async (product) => {
     .input("productName", sql.NVarChar(150), product.productName)
     .input("description", sql.NVarChar(255), product.description ?? null)
     .input("price", sql.Decimal(18,2), product.price)
-    .input("size", sql.NVarChar(50), product.size ?? null)
+    .input("sizeId", sql.Int, product.sizeId ?? null)
     .input("image", sql.NVarChar(255), product.image ?? null)
     .input("isAvailable", sql.Bit, product.isAvailable ?? 1)
     .query(`
       INSERT INTO sg.LQ_CSS_fnb_products
-      (categoryID, productName, description, price, size, image, isAvailable)
-      VALUES (@categoryID,@productName,@description,@price,@size,@image,@isAvailable)
+      (categoryID, productName, description, price, sizeId, image, isAvailable)
+      VALUES (@categoryID, @productName, @description, @price, @sizeId, @image, @isAvailable)
     `);
   return true;
 };
@@ -109,7 +109,7 @@ export const updateProduct = async (productID, product) => {
     productName: sql.NVarChar(150),
     description: sql.NVarChar(255),
     price: sql.Decimal(18, 2),
-    size: sql.NVarChar(50),
+    sizeId: sql.Int,
     isAvailable: sql.Bit,
     image: sql.NVarChar(255),
   };
@@ -118,7 +118,10 @@ export const updateProduct = async (productID, product) => {
 
   for (const [key, type] of Object.entries(fieldsMap)) {
     if (product[key] !== undefined) {
-      const value = type === sql.Decimal(18, 2) ? Number(product[key]) : product[key];
+      // Convert decimals to numbers, and ensure integers for sizeId
+      let value = product[key];
+      if (type === sql.Decimal(18, 2)) value = Number(value);
+      if (key === "sizeId") value = value !== null ? Number(value) : null;
       fields.push(`${key} = @${key}`);
       request.input(key, type, value);
     }
@@ -136,8 +139,13 @@ export const updateProduct = async (productID, product) => {
     WHERE productID = @productID
   `;
 
-  const result = await request.query(query);
-  return result.rowsAffected[0] > 0;
+  try {
+    const result = await request.query(query);
+    return result.rowsAffected[0] > 0;
+  } catch (err) {
+    console.error("DB update error:", err);
+    throw err;
+  }
 };
 
 export const deleteProduct = async (productID) => {
