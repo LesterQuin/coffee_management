@@ -35,6 +35,28 @@ export const getClientPackageByPin = async (pin) => {
 };
 
 // -------------------- Fetch Menu Items for a Package --------------------
+// export const getMenuByPackage = async (packageID) => {
+//   const pool = await poolPromise;
+
+//   const result = await pool.request()
+//     .input("packageID", sql.Int, packageID)
+//     .query(`
+//       SELECT 
+//           i.packageItemID,
+//           i.packageID,
+//           i.productID,
+//           i.quantity,
+//           p.productName,
+//           p.price,
+//           c.categoryName
+//       FROM sg.LQ_CSS_fnb_package_items i
+//       INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
+//       LEFT JOIN sg.LQ_CSS_fnb_categories c ON p.categoryID = c.categoryID
+//       WHERE i.packageID = @packageID
+//     `);
+
+//   return result.recordset;
+// };
 export const getMenuByPackage = async (packageID) => {
   const pool = await poolPromise;
 
@@ -48,12 +70,32 @@ export const getMenuByPackage = async (packageID) => {
           i.quantity,
           p.productName,
           p.price,
+          p.sizeId,
           c.categoryName
       FROM sg.LQ_CSS_fnb_package_items i
       INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
+      LEFT JOIN sg.LQ_CSS_product_sizes s ON p.sizeId = s.sizeId
       LEFT JOIN sg.LQ_CSS_fnb_categories c ON p.categoryID = c.categoryID
       WHERE i.packageID = @packageID
     `);
 
-  return result.recordset;
+  const formatted = result.recordset.map(item => ({
+    packageItemID: item.packageItemID,
+    packageID: item.packageID,
+    quantity: item.quantity,
+    productInfo: {
+      productID: item.productID,
+      productName: item.productName,
+      price: item.price,
+      sizeInfo: {
+        size: item.size,
+        sizeId: item.sizeId
+      },
+      categoryInfo: {
+        categoryName: item.categoryName
+      }
+    }
+  }));
+
+  return formatted;
 };
