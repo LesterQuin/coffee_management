@@ -100,7 +100,7 @@ export const addItem = async (clientID, productID, quantity, sizeId) => {
     .input("cartID", sql.Int, cartID)
     .input("productID", sql.Int, productID)
     .input("quantity", sql.Int, quantity)
-    .input("sizeId", sql.NVarChar(50), sizeId)
+    .input("sizeId", sql.Int, sizeId)
     .query(`
       IF EXISTS (SELECT 1 FROM sg.LQ_CSS_fnb_cart_items WHERE cartID = @cartID AND productID = @productID AND sizeId = @sizeId)
         UPDATE sg.LQ_CSS_fnb_cart_items SET quantity = quantity + @quantity WHERE cartID = @cartID AND productID = @productID AND sizeId = @sizeId
@@ -187,7 +187,7 @@ export const updateItem = async (clientID, productID, quantity, sizeId) => {
     const resItem = await pool.request()
       .input("cartID", sql.Int, cartID)
       .input("productID", sql.Int, productID)
-      .input("sizeId", sql.NVarChar(50), sizeId)
+      .input("sizeId", sql.Int, sizeId)
       .query(`
         SELECT cartItemID
         FROM sg.LQ_CSS_fnb_cart_items
@@ -202,7 +202,7 @@ export const updateItem = async (clientID, productID, quantity, sizeId) => {
         .input("cartID", sql.Int, cartID)
         .input("productID", sql.Int, productID)
         .input("quantity", sql.Int, quantity)
-        .input("sizeId", sql.NVarChar(50), sizeId)
+        .input("sizeId", sql.Int, sizeId)
         .query(`
           UPDATE sg.LQ_CSS_fnb_cart_items
           SET quantity = @quantity
