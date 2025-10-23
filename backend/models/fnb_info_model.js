@@ -46,39 +46,100 @@ export const deleteCategory = async (categoryID) => {
 };
 
 // -------------------- Products --------------------
+// export const getAllProducts = async () => {
+//   const pool = await poolPromise;
+//   const res = await pool.request().query(`
+//     SELECT p.productID, p.productName, p.description, p.price, p.sizeId, p.image, p.isAvailable,
+//            c.categoryName
+//     FROM sg.LQ_CSS_fnb_products p
+//     INNER JOIN sg.LQ_CSS_fnb_categories c ON p.categoryID = c.categoryID
+//     LEFT JOIN sg.LQ_CSS_fnb_product_size s ON p.sizeId = s.sizeId
+//   `);
+//    const formatted = res.recordset.map(item => ({
+//     productID: item.productID,
+//     productName: item.productName,
+//     description: item.description,
+//     price: item.price,
+//     sizeInfo: {
+//       size: item.size,
+//       sizeId: item.sizeId
+//     },
+//     image: item.image,
+//     isAvailable: item.isAvailable,
+//     categoryInfo: {
+//       categoryName: item.categoryName,
+//       categoryId: item.categoryID
+//     }
+//   }));
+//   return res.recordset;
+// };
+
 export const getAllProducts = async () => {
   const pool = await poolPromise;
   const res = await pool.request().query(`
-    SELECT p.productID, p.productName, p.description, p.price, p.sizeId, p.image, p.isAvailable,
-           c.categoryName
+    SELECT 
+      p.productID, p.productName, p.description, p.price, p.sizeId, s.size, p.image, p.isAvailable, p.categoryID, c.categoryName
     FROM sg.LQ_CSS_fnb_products p
     INNER JOIN sg.LQ_CSS_fnb_categories c ON p.categoryID = c.categoryID
+    LEFT JOIN sg.LQ_CSS_product_sizes s ON p.sizeId = s.sizeId
   `);
-  return res.recordset;
+
+
+  const formatted = res.recordset.map(item => ({
+    productID: item.productID,
+    productName: item.productName,
+    description: item.description,
+    price: item.price,
+    sizeInfo: {
+      size: item.size,
+      sizeId: item.sizeId
+    },
+    image: item.image,
+    isAvailable: item.isAvailable,
+    categoryInfo: {
+      categoryName: item.categoryName,
+      categoryId: item.categoryID
+    }
+  }));
+
+  return formatted;
 };
 
 export const getProductByCategory = async (categoryID) => {
   const pool = await poolPromise;
+
   const result = await pool.request()
     .input("categoryID", sql.Int, categoryID)
     .query(`
-      SELECT 
-        p.productID,
-        p.productName,
-        p.description,
-        p.price,
-        p.sizeId,
-        p.image,
-        p.isAvailable,
-        c.categoryID,
-        c.categoryName,
-        c.description AS categoryDescription
+        SELECT 
+        p.productID, p.productName, p.description, p.price, 
+        p.sizeId, s.size, p.image, p.isAvailable, 
+        c.categoryID, c.categoryName
       FROM sg.LQ_CSS_fnb_products p
       INNER JOIN sg.LQ_CSS_fnb_categories c ON p.categoryID = c.categoryID
+      LEFT JOIN sg.LQ_CSS_product_sizes s ON p.sizeId = s.sizeId
       WHERE p.categoryID = @categoryID
       ORDER BY p.productName
   `);
-  return result.recordset;
+
+  const formatted = result.recordset.map(item => ({
+    productID: item.productID,
+    productName: item.productName,
+    description: item.description,
+    price: item.price,
+    sizeInfo: {
+      size: item.size,
+      sizeId: item.sizeId
+    },
+    image: item.image,
+    isAvailable: item.isAvailable,
+    categoryInfo: {
+      categoryName: item.categoryName,
+      categoryId: item.categoryID
+    }
+  }));
+
+  return formatted;
 }
 
 export const createProduct = async (product) => {
