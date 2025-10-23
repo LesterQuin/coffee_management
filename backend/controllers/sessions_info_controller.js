@@ -52,7 +52,7 @@ export const clientLogin = async (req, res) => {
       packageName: client.packageName
     }, "Logged in successfully");
   } catch (e) {
-    console.error("clientLogin error", e);
+    console.error("❌ ClientLogin error", e);
     return error(res, e.message);
   }
 };

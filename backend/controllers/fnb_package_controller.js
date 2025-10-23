@@ -39,7 +39,7 @@ export const getClientPackageByPin = async (req, res) => {
         "Client package and menu retrieved successfully"
     );
   } catch (e) {
-    console.error("Error fetching package by PIN:", e);
+    console.error("❌ Error fetching package by PIN:", e);
     return error(res, "An error occured while fetching client package info");
   }
 };
@@ -58,7 +58,7 @@ export const getMenuByPackage = async (req, res) => {
     }
     return success(res, menu, "Package menu retrieved successfully");
   } catch (e){
-    console.error("Error fetching package menu", e);
+    console.error("❌ Error fetching package menu", e);
     return error(res, "An error occuredwhile fetching the package menu");
   }
 };

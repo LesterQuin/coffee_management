@@ -70,7 +70,7 @@ export const updateChapel = async(req, res) => {
     }
     return res.json({ success: true, message: "Chapel updated successfully" });
   } catch (e) {
-    console.error("Update chapel DB error:", e);
+    console.error("❌ Update chapel DB error:", e);
     return res.status(500).json({ success: false, message: e.message });
   }
 };
@@ -84,7 +84,7 @@ export const deleteChapel = async (req, res) => {
     if (!result) return res.status(404).json({ success: false, message: "Chapel not found" });
     res.json({ success: true, message: "Chapel deleted successfully" });
   } catch (err) {
-    console.error("Delete chapel error:", err);
+    console.error("❌ Delete chapel error:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
