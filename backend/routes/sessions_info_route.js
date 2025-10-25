@@ -7,7 +7,7 @@ const router = express.Router();
 
 // ----------------------POST-------------------------
 // Client login
-router.post("/client-login", Controller.clientLogin);
+router.post("/user-login", Controller.clientLogin);
 
 // ----------------------PUT-------------------------
 

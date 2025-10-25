@@ -88,8 +88,8 @@ export const getMenuByPackage = async (packageID) => {
       productName: item.productName,
       price: item.price,
       sizeInfo: {
-        size: item.size,
-        sizeId: item.sizeId
+        sizeId: item.sizeId,
+        size: item.sizeName
       },
       categoryInfo: {
         categoryName: item.categoryName

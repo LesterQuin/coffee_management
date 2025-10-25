@@ -15,6 +15,10 @@ router.get("/:clientID", staffAuth, Controller.getClientById);
 router.post("/register", staffAuth, Controller.registerClient);
 // Client login
 router.post("/login", Controller.clientLogin);
+// consume an item (strict mode)
+router.post("/:clientID/consume", staffAuth, Controller.consumeItem);
+// add a package to a client (merge quantities)
+router.post("/:clientID/add-package", staffAuth, Controller.addPackage);
 // ----------------------PUT-------------------------
 // Update client information
 router.put("/:clientID", staffAuth, Controller.update);

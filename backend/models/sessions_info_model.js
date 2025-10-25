@@ -16,6 +16,18 @@ export const getActiveSession = async (userName, pin) => {
   return res.recordset[0];
 };
 
+export const getPackageById = async (packageID) => {
+  const pool = await poolPromise;
+  const res = await pool.request()
+    .input("packageID", sql.Int, packageID)
+    .query(`
+      SELECT *
+      FROM sg.LQ_CSS_fnb_packages
+      WHERE packageID = @packageID
+    `);
+  return res.recordset[0];
+};
+
 // ----------------------POST-------------------------
 // Create a new session
 export const createSession = async ({ clientID, userName, pin, qrDataUrl, expiresAt }) => {

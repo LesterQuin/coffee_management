@@ -39,7 +39,15 @@ export const clientLogin = async (req, res) => {
       packageName: client.packageName
     });
 
-    const sessionId = await Sessions.createSession({ clientID: client.chapelID, userName, pin, qrDataUrl, expiresAt});
+    const sessionId = await Sessions.createSession({
+        clientID: client.clientID,
+        userName,
+        pin,
+        qrDataUrl,
+        expiresAt
+    });
+
+    const packageInfo = await Sessions.getPackageById(client.packageNo);
 
     return success(res, {
       sessionId,
@@ -49,7 +57,8 @@ export const clientLogin = async (req, res) => {
       chapelID: client.chapelID,
       chapelName: client.chapelName,
       packageNo: client.packageNo,
-      packageName: client.packageName
+      packageName: client.packageName,
+      package: packageInfo
     }, "Logged in successfully");
   } catch (e) {
     console.error("❌ ClientLogin error", e);

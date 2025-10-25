@@ -233,18 +233,47 @@ export const getPackageByID = async (packageID) => {
   return res.recordset[0];
 };
 
-export const createPackage = async (pkg) => {
+// export const createPackage = async (pkg) => {
+//   const pool = await poolPromise;
+//   await pool.request()
+//     .input("packageName", sql.NVarChar(100), pkg.packageName)
+//     .input("description", sql.NVarChar(255), pkg.description ?? null)
+//     .input("totalValue", sql.Decimal(18,2), pkg.totalValue)
+//     .query(`
+//       INSERT INTO sg.LQ_CSS_fnb_packages 
+//       (packageName, description, totalValue) 
+//       VALUES (@packageName,@description,@totalValue)
+//     `);
+//   return true;
+// };
+// export const createPackage = async (data) => {
+//   const pool = await poolPromise;
+//   const result = await pool.request()
+//     .input("packageName", sql.NVarChar, data.packageName)
+//     .input("description", sql.NVarChar, data.description ?? null)
+//     .query(`
+//       INSERT INTO sg.LQ_CSS_fnb_packages (packageName, description, totalValue)
+//       OUTPUT INSERTED.packageID
+//       VALUES (@packageName, @description, 0)
+//     `);
+
+//   return result.recordset[0].packageID;
+// };
+export const createPackage = async (data) => {
   const pool = await poolPromise;
-  await pool.request()
-    .input("packageName", sql.NVarChar(100), pkg.packageName)
-    .input("description", sql.NVarChar(255), pkg.description ?? null)
-    .input("totalValue", sql.Decimal(18,2), pkg.totalValue)
+  const result = await pool.request()
+    .input("packageName", sql.NVarChar(100), data.packageName)
+    .input("description", sql.NVarChar(255), data.description ?? null)
+    .input("totalValue", sql.Decimal(18,2), data.totalValue ?? 0)
     .query(`
-      INSERT INTO sg.LQ_CSS_fnb_packages 
-      (packageName, description, totalValue) 
-      VALUES (@packageName,@description,@totalValue)
+      INSERT INTO sg.LQ_CSS_fnb_packages (packageName, description, totalValue)
+      OUTPUT INSERTED.packageID, INSERTED.totalValue
+      VALUES (@packageName, @description, @totalValue)
     `);
-  return true;
+
+  // return both ID and the stored totalValue
+  const row = result.recordset[0];
+  return { packageID: row.packageID, totalValue: row.totalValue };
 };
 
 export const updatePackage = async (packageID, pkg) => {
@@ -269,50 +298,241 @@ export const deletePackage = async (packageID) => {
 };
 
 // -------------------- Package Items --------------------
+// export const getPackageItems = async (packageID) => {
+//   const pool = await poolPromise;
+//   const res = await pool.request()
+//     .input("packageID", sql.Int, packageID)
+//     .query(`
+//       SELECT i.packageItemID, i.packageID, i.productID, p.productName, p.price, i.quantity
+//       FROM sg.LQ_CSS_fnb_package_items i
+//       INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
+//       WHERE i.packageID = @packageID
+//     `);
+
+//   const items = res.recordset || [];
+
+//   const pkgRes = await pool.request()
+//     .input("packageID", sql.Int, packageID)
+//     .query("SELECT totalValue FROM sg.LQ_CSS_fnb_packages WHERE packageID=@packageID");
+
+//   if (!pkgRes.recordset.length) return { items: [], remainingValue: 0 };
+
+//   const totalValue = pkgRes.recordset[0].totalValue;
+//   const totalUsed = items.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+//   const remainingValue = totalValue - totalUsed;
+
+//   return { items, remainingValue };
+// };
+
 export const getPackageItems = async (packageID) => {
   const pool = await poolPromise;
+
   const res = await pool.request()
     .input("packageID", sql.Int, packageID)
     .query(`
-      SELECT i.packageItemID, i.packageID, i.productID, p.productName, p.price, i.quantity
+      SELECT 
+        i.packageItemID,
+        i.packageID,
+        i.productID,
+        i.quantity,
+        p.productName,
+        p.price,
+        p.sizeId,
+        s.size,
+        p.categoryID,
+        c.categoryName
       FROM sg.LQ_CSS_fnb_package_items i
       INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
+      LEFT JOIN sg.LQ_CSS_product_sizes s ON p.sizeId = s.sizeId
+      LEFT JOIN sg.LQ_CSS_fnb_categories c ON p.categoryID = c.categoryID
       WHERE i.packageID = @packageID
+      ORDER BY i.packageItemID
     `);
 
-  const items = res.recordset || [];
+  const itemsRaw = res.recordset || [];
 
+  // get package totalValue
   const pkgRes = await pool.request()
     .input("packageID", sql.Int, packageID)
     .query("SELECT totalValue FROM sg.LQ_CSS_fnb_packages WHERE packageID=@packageID");
 
-  if (!pkgRes.recordset.length) return { items: [], remainingValue: 0 };
+  if (!pkgRes.recordset.length) {
+    return { items: [], remainingValue: 0, exceeded: false, exceededValue: 0 };
+  }
 
-  const totalValue = pkgRes.recordset[0].totalValue;
-  const totalUsed = items.reduce((sum, i) => sum + (i.price * i.quantity), 0);
-  const remainingValue = totalValue - totalUsed;
+  const totalValue = Number(pkgRes.recordset[0].totalValue) || 0;
 
-  return { items, remainingValue };
+  // compute total used
+  const totalUsed = itemsRaw.reduce((sum, it) => sum + (Number(it.price) * Number(it.quantity)), 0);
+  const remainingValue = Number((totalValue - totalUsed).toFixed(2));
+  const exceeded = remainingValue < 0;
+  const exceededValue = exceeded ? Math.abs(remainingValue) : 0;
+
+  const items = itemsRaw.map(item => ({
+    packageItemID: item.packageItemID,
+    packageID: item.packageID,
+    quantity: item.quantity,
+    productInfo: {
+      productID: item.productID,
+      productName: item.productName,
+      price: Number(item.price),
+      sizeInfo: {
+        size: item.size ?? null,
+        sizeId: item.sizeId ?? null
+      },
+      categoryInfo: {
+        categoryId: item.categoryID,
+        categoryName: item.categoryName
+      }
+    }
+  }));
+
+  return { items, remainingValue, exceeded, exceededValue };
 };
 
-export const addPackageItem = async (packageID, productID, quantity) => {
+// export const addPackageItem = async (packageID, productID, quantity) => {
+//   const pool = await poolPromise;
+//   await pool.request()
+//     .input("packageID", sql.Int, packageID)
+//     .input("productID", sql.Int, productID)
+//     .input("quantity", sql.Int, quantity)
+//     .query(`
+//       INSERT INTO sg.LQ_CSS_fnb_package_items 
+//       (packageID, productID, quantity) 
+//       VALUES (@packageID, @productID, @quantity)
+//     `);
+// };
+
+// export const addPackageItem = async (packageID, productID, quantity) => {
+//   const pool = await poolPromise;
+//   const transaction = pool.transaction();
+
+//   try {
+//     await transaction.begin();
+
+//     // Insert item
+//     await transaction.request()
+//       .input("packageID", sql.Int, packageID)
+//       .input("productID", sql.Int, productID)
+//       .input("quantity", sql.Int, quantity)
+//       .query(`
+//         INSERT INTO sg.LQ_CSS_fnb_package_items (packageID, productID, quantity)
+//         VALUES (@packageID, @productID, @quantity)
+//       `);
+
+//     // Subtract price * qty from package totalValue
+//     await transaction.request()
+//       .input("packageID", sql.Int, packageID)
+//       .input("productID", sql.Int, productID)
+//       .input("quantity", sql.Int, quantity)
+//       .query(`
+//         UPDATE sg.LQ_CSS_fnb_packages
+//         SET totalValue = totalValue - (p.price * @quantity)
+//         FROM sg.LQ_CSS_fnb_packages pkg
+//         JOIN sg.LQ_CSS_fnb_products p ON p.productID = @productID
+//         WHERE pkg.packageID = @packageID
+//       `);
+
+//     await transaction.commit();
+//     return true;
+//   } catch (err) {
+//     await transaction.rollback();
+//     throw err;
+//   }
+// };
+
+export const addPackageItems = async (packageID, items) => {
   const pool = await poolPromise;
-  await pool.request()
-    .input("packageID", sql.Int, packageID)
-    .input("productID", sql.Int, productID)
-    .input("quantity", sql.Int, quantity)
-    .query(`
-      INSERT INTO sg.LQ_CSS_fnb_package_items 
-      (packageID, productID, quantity) 
-      VALUES (@packageID, @productID, @quantity)
-    `);
+  const transaction = pool.transaction();
+
+  try {
+    await transaction.begin();
+
+    for (const item of items) {
+      const { productID, quantity } = item;
+
+      if (!productID || !quantity) continue;
+
+      // Insert item
+      await transaction.request()
+        .input("packageID", sql.Int, packageID)
+        .input("productID", sql.Int, productID)
+        .input("quantity", sql.Int, quantity)
+        .query(`
+          INSERT INTO sg.LQ_CSS_fnb_package_items (packageID, productID, quantity)
+          VALUES (@packageID, @productID, @quantity)
+        `);
+
+      // Update package totalValue
+      await transaction.request()
+        .input("packageID", sql.Int, packageID)
+        .input("productID", sql.Int, productID)
+        .input("quantity", sql.Int, quantity)
+        .query(`
+          UPDATE sg.LQ_CSS_fnb_packages
+          SET totalValue = totalValue - (p.price * @quantity)
+          FROM sg.LQ_CSS_fnb_packages pkg
+          JOIN sg.LQ_CSS_fnb_products p ON p.productID = @productID
+          WHERE pkg.packageID = @packageID
+        `);
+    }
+
+    await transaction.commit();
+    return true;
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
 };
+
 
 export const deletePackageItem = async (packageItemID) => {
   const pool = await poolPromise;
-  await pool.request()
-    .input("packageItemID", sql.Int, packageItemID)
-    .query("DELETE FROM sg.LQ_CSS_fnb_package_items WHERE packageItemID=@packageItemID");
+  const transaction = pool.transaction();
+
+  try {
+    await transaction.begin();
+
+    // fetch item details first
+    const itemRes = await transaction.request()
+      .input("packageItemID", sql.Int, packageItemID)
+      .query(`
+        SELECT packageItemID, packageID, productID, quantity
+        FROM sg.LQ_CSS_fnb_package_items
+        WHERE packageItemID=@packageItemID
+      `);
+
+    if (!itemRes.recordset.length) {
+      await transaction.rollback();
+      return false;
+    }
+
+    const item = itemRes.recordset[0];
+
+    // delete the item
+    await transaction.request()
+      .input("packageItemID", sql.Int, packageItemID)
+      .query("DELETE FROM sg.LQ_CSS_fnb_package_items WHERE packageItemID=@packageItemID");
+
+    // add back (price * qty) to package totalValue
+    await transaction.request()
+      .input("packageID", sql.Int, item.packageID)
+      .input("productID", sql.Int, item.productID)
+      .input("quantity", sql.Int, item.quantity)
+      .query(`
+        UPDATE sg.LQ_CSS_fnb_packages
+        SET totalValue = totalValue + (p.price * @quantity)
+        FROM sg.LQ_CSS_fnb_packages pkg
+        JOIN sg.LQ_CSS_fnb_products p ON p.productID = @productID
+        WHERE pkg.packageID = @packageID
+      `);
+
+    await transaction.commit();
+    return true;
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
 };
 
 export const deleteAllPackageItems = async (packageID) => {
@@ -330,19 +550,79 @@ export const getPackageItemById = async (itemId) => {
   return res.recordset[0];
 };
 
-export const updatePackageItem = async (packageID, itemId, quantity) => {
-  const pool = await poolPromise;
-  const result = await pool.request()
-    .input("quantity", sql.Int, quantity)
-    .input("packageItemID", sql.Int, itemId)
-    .input("packageID", sql.Int, packageID)
-    .query(`
-      UPDATE sg.LQ_CSS_fnb_package_items
-      SET quantity = @quantity
-      WHERE packageItemID = @packageItemID AND packageID = @packageID
-    `);
+// export const updatePackageItem = async (packageID, itemId, quantity) => {
+//   const pool = await poolPromise;
+//   const result = await pool.request()
+//     .input("quantity", sql.Int, quantity)
+//     .input("packageItemID", sql.Int, itemId)
+//     .input("packageID", sql.Int, packageID)
+//     .query(`
+//       UPDATE sg.LQ_CSS_fnb_package_items
+//       SET quantity = @quantity
+//       WHERE packageItemID = @packageItemID AND packageID = @packageID
+//     `);
 
-  return result.rowsAffected[0] > 0;
+//   return result.rowsAffected[0] > 0;
+// };
+
+export const updatePackageItem = async (packageID, packageItemID, newQuantity) => {
+  const pool = await poolPromise;
+  const transaction = pool.transaction();
+
+  try {
+    await transaction.begin();
+
+    // get current item
+    const itemRes = await transaction.request()
+      .input("packageItemID", sql.Int, packageItemID)
+      .input("packageID", sql.Int, packageID)
+      .query(`
+        SELECT packageItemID, productID, quantity
+        FROM sg.LQ_CSS_fnb_package_items
+        WHERE packageItemID=@packageItemID AND packageID=@packageID
+      `);
+
+    if (!itemRes.recordset.length) {
+      await transaction.rollback();
+      return false; // not found
+    }
+
+    const current = itemRes.recordset[0];
+    const oldQty = Number(current.quantity);
+    const delta = Number(newQuantity) - oldQty;
+
+    // Update item quantity
+    await transaction.request()
+      .input("packageItemID", sql.Int, packageItemID)
+      .input("packageID", sql.Int, packageID)
+      .input("quantity", sql.Int, newQuantity)
+      .query(`
+        UPDATE sg.LQ_CSS_fnb_package_items
+        SET quantity = @quantity
+        WHERE packageItemID = @packageItemID AND packageID = @packageID
+      `);
+
+    // If delta !== 0 adjust package totalValue by (price * delta)
+    if (delta !== 0) {
+      await transaction.request()
+        .input("packageID", sql.Int, packageID)
+        .input("productID", sql.Int, current.productID)
+        .input("delta", sql.Int, delta)
+        .query(`
+          UPDATE pkg
+          SET totalValue = totalValue - (p.price * @delta)
+          FROM sg.LQ_CSS_fnb_packages pkg
+          JOIN sg.LQ_CSS_fnb_products p ON p.productID = @productID
+          WHERE pkg.packageID = @packageID
+        `);
+    }
+
+    await transaction.commit();
+    return true;
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
 };
 
 // -------------------- Validation: check package total --------------------

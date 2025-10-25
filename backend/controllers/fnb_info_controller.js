@@ -115,10 +115,21 @@ export const listPackages = async (req, res) => {
   }
 };
 
+// export const createPackage = async (req, res) => {
+//   try {
+//     await Model.createPackage(req.body);
+//     return success(res, null, "Package created successfully");
+//   } catch (e) {
+//     console.error("❌ createPackage error:", e);
+//     return error(res, e.message);
+//   }
+// };
 export const createPackage = async (req, res) => {
   try {
-    await Model.createPackage(req.body);
-    return success(res, null, "Package created successfully");
+    const payload = req.body;
+    // validate required fields if needed
+    const created = await Model.createPackage(payload);
+    return success(res, { packageID: created.packageID, totalValue: Number(created.totalValue) }, "Package created successfully");
   } catch (e) {
     console.error("❌ createPackage error:", e);
     return error(res, e.message);
@@ -157,51 +168,92 @@ export const deletePackage = async (req, res) => {
 export const listPackageItems = async (req, res) => {
   try {
     const { packageID } = req.params;
-    const { items, remainingValue } = await Model.getPackageItems(packageID);
-    return success(res, { items, remainingValue }, "Package items fetched successfully");
+    if (!packageID) return error(res, "packageID is required", 400);
+
+    const { items, remainingValue, exceeded, exceededValue } = await Model.getPackageItems(packageID);
+    return success(res, { items, remainingValue, exceeded, exceededValue }, "Package items fetched successfully");
   } catch (e) {
     console.error("❌ listPackageItems error:", e);
     return error(res, e.message);
   }
 };
 
-export const addPackageItem = async (req, res) => {
-  try {
-    const { packageID } = req.params;
-    const { productID, quantity } = req.body;
+// export const addPackageItem = async (req, res) => {
+//   try {
+//     const { packageID } = req.params;
+//     const { productID, quantity } = req.body;
 
-    const allowed = await Model.canAddPackageItem(packageID, productID, quantity);
-    if (!allowed) {
-      return error(res, "Cannot add item: exceeds package total value", 400);
+//     if (!packageID || !productID || !quantity) {
+//       return error(res, "packageID, productID and quantity are required", 400);
+//     }
+
+//     await Model.addPackageItem(Number(packageID), Number(productID), Number(quantity));
+
+//     // return updated package items + remaining/exceeded info
+//     const result = await Model.getPackageItems(Number(packageID));
+//     return success(res, result, "Package item added successfully");
+//   } catch (e) {
+//     console.error("❌ addPackageItem error:", e);
+//     return error(res, e.message || "Failed to add package item");
+//   }
+// };
+
+// this is ID with endpoint 
+// export const addPackageItems = async (req, res) => {
+//   try {
+//     const { packageID } = req.params;
+//     const { items } = req.body; // array of { productID, quantity }
+
+//     if (!packageID || !items || !Array.isArray(items) || items.length === 0) {
+//       return error(res, "packageID and items array are required", 400);
+//     }
+
+//     await Model.addPackageItems(Number(packageID), items);
+
+//     // return updated package items + remaining/exceeded info
+//     const result = await Model.getPackageItems(Number(packageID));
+//     return success(res, result, "Package items added successfully");
+//   } catch (e) {
+//     console.error("❌ addPackageItems error:", e);
+//     return error(res, e.message || "Failed to add package items");
+//   }
+// };
+
+export const addPackageItems = async (req, res) => {
+  try {
+    const { packageID, items } = req.body; // packageID is now in the body
+
+    if (!packageID || !items || !Array.isArray(items) || items.length === 0) {
+      return error(res, "packageID and items array are required", 400);
     }
 
-    await Model.addPackageItem(packageID, productID, quantity);
-    const { items, remainingValue } = await Model.getPackageItems(packageID);
+    await Model.addPackageItems(Number(packageID), items);
 
-    return success(res, { items, remainingValue }, "Package item added successfully");
+    // Return updated package items + remaining/exceeded info
+    const result = await Model.getPackageItems(Number(packageID));
+    return success(res, result, "Package items added successfully");
   } catch (e) {
-    console.error("❌ addPackageItem error:", e);
-    return error(res, e.message || "Failed to add package item");
+    console.error("❌ addPackageItems error:", e);
+    return error(res, e.message || "Failed to add package items");
   }
 };
 
+
 export const updatePackageItem = async (req, res) => {
-  const { packageID, itemId } = req.params;
-  const { quantity } = req.body;
-
-  if (!quantity || quantity <= 0) {
-    return error(res, "Invalid quantity value", 400);
-  }
-
   try {
-    const affectedRows = await Model.updatePackageItem(packageID, itemId, quantity);
+    const { packageID, itemId } = req.params;
+    const { quantity } = req.body;
 
-    if (affectedRows === 0) {
-      return error(res, "Package item not found", 404);
+    if (!quantity || quantity <= 0) {
+      return error(res, "Invalid quantity value", 400);
     }
 
-    const { items, remainingValue } = await Model.getPackageItems(packageID);
-    return success(res, { items, remainingValue }, "Item quantity updated successfully");
+    const updated = await Model.updatePackageItem(Number(packageID), Number(itemId), Number(quantity));
+
+    if (!updated) return error(res, "Package item not found or not updated", 404);
+
+    const result = await Model.getPackageItems(Number(packageID));
+    return success(res, result, "Item quantity updated successfully");
   } catch (e) {
     console.error("❌ updatePackageItem error:", e);
     return error(res, e.message || "Internal server error");
@@ -211,21 +263,21 @@ export const updatePackageItem = async (req, res) => {
 export const deletePackageItem = async (req, res) => {
   try {
     const { itemId } = req.params;
-    const item = await Model.getPackageItemById(itemId);
 
+    // fetch item's packageID before deleting (model.deletePackageItem returns true/false)
+    // but we need the packageID to return updated package items.
+    const item = await Model.getPackageItemById(Number(itemId));
     if (!item) return error(res, "Package item not found", 404);
 
-    await Model.deletePackageItem(itemId);
+    await Model.deletePackageItem(Number(itemId));
 
-    const { items, remainingValue } = await Model.getPackageItems(item.packageID);
-
-    return success(res, { items, remainingValue }, "Package item deleted successfully");
+    const result = await Model.getPackageItems(Number(item.packageID));
+    return success(res, result, "Package item deleted successfully");
   } catch (e) {
     console.error("❌ deletePackageItem error:", e);
     return error(res, e.message);
   }
 };
-
 // -------------------- Products by Category --------------------
 export const listProductByCategory = async (req, res) => {
   try {

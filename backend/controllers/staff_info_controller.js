@@ -14,7 +14,7 @@ export const getAllStaff = async (req, res) => {
     const staffList = await Model.getAllStaff();
     res.json({ success: true, data: staffList });
   } catch (err) {
-    console.error("Error fetching staff:", err);
+    console.error("❌ Error fetching staff:", err);
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -106,7 +106,7 @@ export const updateStaff = async (req, res) => {
 
     return res.json({ success: true, message: "Staff updated successfully" });
   } catch (err) {
-    console.error("Update staff error:", err);
+    console.error("❌ Update staff error:", err);
     return res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -123,7 +123,7 @@ export const deleteStaff = async (req, res) => {
 
     res.json({ success: true, message: "Staff deleted successfully" });
   } catch (err) {
-    console.error("Delete staff error:", err);
+    console.error("❌ Delete staff error:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };

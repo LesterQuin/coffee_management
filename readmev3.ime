@@ -1,0 +1,43 @@
+// 10/15 add delete api (route, model, controller) 
+// 10/15 add delete button for the cashier FE (register)
+// 10/15 add update button for the cashier FE (register)
+// 10/16 fetch data from admin fnb to cashier dashboard
+// 10/16 enable edit the package for the cashier dashboard
+// 10/16 create api for PUT "/packages/:packageID/items/:itemId" (package)
+// 10/16 create api for PUT "/update", staffAuth, Cart.updateItem" (cart)
+// 10/16 create api for scan and pin (package)
+// 10/16 get api for id for the package
+// 10/16 create api for fetch the scan qr with pin together with package selected 
+// 10/16 update in FE to check if the qr and pin was correct with the package
+// 10/17 get product base on categories API
+// 10/17 update registration fullname to first middle last name
+    check why middleName and middleInitial accept in test for registration for staff
+// 10/17 create PUT api Chapel status(available, not available)
+// 10/17 create GET api for view all cart 
+// 10/20remove address in the form
+// 10/20 add contact person in the form and contact number
+// 10/20 add UPDATE contact person and number in API
+    add time in and out for the form 
+    pin per chapel auto change every day 
+    per register have a default package once it register
+// 10/20 add table status for the chapel 
+// 10/20 add table size for the product
+// 10/20 add table role for the role
+// 10/20 create add for tables API
+// 10/20 PUT add for tables API
+// 10/20 GET add for tables API
+// 10/20 DELETE add for table API
+    Update client specific only like not editable the pin
+// 10/21 PUT add fnb product any details
+// 10/21 Remove role and status in db for LQ_CSS_staff_accounts
+// 10/21 Update the response for the login instead of int in role and status it string
+    Package Name  store size , price at the same ID of package Name
+//  remove status in chapel 
+    add default package in registration 
+    change size to size id in product in database
+    change the api of product to size to sizeid
+
+
+
+   USER =api/sessions/client-login -> POST/api/cart/add -> POST/api/cart/checkout
+   Cashier = GET/api/orders/client/1 -> PUT/api/orders/status/1

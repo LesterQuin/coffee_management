@@ -9,7 +9,7 @@ export const getAllClients = async (req, res) => {
     const data = await Model.getAllClient();
     return success(res, data, "Clients list fetched successfully");
   } catch (e) {
-    console.error("GetAllClients Error:", e);
+    console.error("❌ GetAllClients Error:", e);
     return error(res, e.message);
   }
 };
@@ -52,16 +52,34 @@ export const getClientById = async (req, res) => {
 // Register a new client
 export const registerClient = async (req, res) => {
   try {
-    const userName = req.user?.name || "unknown"; // assuming auth middleware sets req.user
-    const clientData = req.body;
+    const userName = req.user?.name || "unknown";
+    
+    // Register client and assign default package
+    const result = await Model.registerClientWithQR(req.body, userName);
 
-    // Call the updated model function
-    const result = await Model.registerClientWithQR(clientData, userName);
+    const { clientID, assignedPackageID } = result;
 
-    return success(res, result, "Client registered successfully");
+    // Fetch assigned package items
+    let packageItems = [];
+    if (assignedPackageID) {
+      packageItems = await Model.getClientPackageItems(clientID);
+    }
+
+    return res.json({
+      success: true,
+      message: "Client registered successfully with default package",
+      data: {
+        client: result,
+        assignedPackageID,
+        packageItems,
+        qrDataUrl: result.qrDataUrl,
+        sessionID: result.sessionID,
+        pin: result.pin
+      }
+    });
   } catch (e) {
-    console.error("Error registering client:", e);
-    return error(res, e.message || "Failed to register client");
+    console.error("❌ Register Error:", e);
+    return res.status(500).json({ success: false, message: e.message });
   }
 };
 
@@ -95,6 +113,44 @@ export const clientLogin = async (req, res) => {
   }
 };
 
+export const consumeItem = async (req, res) => {
+  try {
+    const clientID = parseInt(req.params.clientID, 10);
+    if (isNaN(clientID)) return error(res, "Invalid clientID", 400);
+
+    const { productID, qty } = req.body;
+    if (!productID || isNaN(Number(productID))) return error(res, "productID is required", 400);
+    if (!qty || isNaN(Number(qty)) || Number(qty) <= 0) return error(res, "qty must be a positive number", 400);
+
+    const result = await Model.consumeClientItem(clientID, Number(productID), Number(qty));
+
+    if (!result || result.success === false) {
+      return error(res, result?.message || "Consume failed", 400);
+    }
+
+    return success(res, result, "Consumed successfully");
+  } catch (e) {
+    console.error("❌ ConsumeItem Error:", e);
+    return error(res, e.message || "Server error");
+  }
+};
+
+export const addPackage = async (req, res) => {
+  try {
+    const clientID = parseInt(req.params.clientID, 10);
+    if (isNaN(clientID)) return error(res, "Invalid clientID", 400);
+
+    const { packageID } = req.body;
+    if (!packageID || isNaN(Number(packageID))) return error(res, "packageID is required", 400);
+
+    const result = await Model.addPackageToClient(clientID, Number(packageID));
+    return success(res, result, "Package added successfully");
+  } catch (e) {
+    console.error("❌ AddPackage Error:", e);
+    return error(res, e.message || "Server error");
+  }
+};
+
 // ----------------------PUT-------------------------
 // Update client information
 export const update = async (req, res) => {
@@ -118,7 +174,7 @@ export const update = async (req, res) => {
 
     return res.json({success: true, message: "Client updated successfully"});
   } catch (e) {
-    console.error("Update Client Error:", e);
+    console.error("❌ Update Client Error:", e);
     return res.status(500).json({success: false, message: e.message || "Server error"});
   }
 };
@@ -135,7 +191,7 @@ export const raiseBalance = async (req, res) => {
     await Model.raiseBalance(clientID, amount, type);
     return success(res, null, "Balance updated successfully");
   } catch (e) {
-    console.error("Raise Balance Error:", e);
+    console.error("❌ Raise Balance Error:", e);
     return error(res, e.message);
   }
 };
@@ -158,7 +214,7 @@ export const deleteClient = async (req, res) => {
 
     return res.json({ success: true, message: "Client deleted successfully" });
   } catch (err) {
-    console.error("Error deleting client:", err);
+    console.error("❌ Error deleting client:", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 };

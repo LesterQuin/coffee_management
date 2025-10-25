@@ -41,10 +41,12 @@ router.delete("/packages/:packageID", staffAuth, Controller.deletePackage);
 // Get all items under a specific package
 router.get("/packages/:packageID/items", staffAuth, Controller.listPackageItems);
 // Add an item to a specific package
-router.post("/packages/:packageID/items", staffAuth, Controller.addPackageItem);
+router.post("/packages/items", staffAuth, Controller.addPackageItems);
+// router.post("/packages/:packageID/items", staffAuth, Controller.addPackageItems);
 // Update a specific item to a specific package
 router.put("/packages/:packageID/items/:itemId", staffAuth, Controller.updatePackageItem);
 // Delete a specific item from a specific package
 router.delete("/packages/:packageID/items/:itemId", staffAuth, Controller.deletePackageItem);
 
 export default router;
+//http://localhost:5000/api/fnb/packages/:id/items
