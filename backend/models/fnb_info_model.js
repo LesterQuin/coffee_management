@@ -235,16 +235,19 @@ export const getPackageByID = async (packageID) => {
 
 export const createPackage = async (pkg) => {
   const pool = await poolPromise;
-  await pool.request()
+  const res = await pool.request()
     .input("packageName", sql.NVarChar(100), pkg.packageName)
     .input("description", sql.NVarChar(255), pkg.description ?? null)
     .input("totalValue", sql.Decimal(18,2), pkg.totalValue)
+    .input("quantity", sql.Int, pkg.quantity)
     .query(`
       INSERT INTO sg.LQ_CSS_fnb_packages 
-      (packageName, description, totalValue) 
-      VALUES (@packageName,@description,@totalValue)
+      (packageName, description, totalValue, quantity) 
+      VALUES (@packageName,@description,@totalValue,@quantity);
+      SELECT SCOPE_IDENTITY() AS packageID;
     `);
-  return true;
+
+  return res.recordset[0].packageID;
 };
 
 export const updatePackage = async (packageID, pkg) => {
@@ -254,9 +257,11 @@ export const updatePackage = async (packageID, pkg) => {
     .input("packageName", sql.NVarChar(100), pkg.packageName)
     .input("description", sql.NVarChar(255), pkg.description ?? null)
     .input("totalValue", sql.Decimal(18,2), pkg.totalValue)
+    .input("quantity", sql.Int, pkg.quantity)
     .query(`
       UPDATE sg.LQ_CSS_fnb_packages
-      SET packageName=@packageName, description=@description, totalValue=@totalValue
+      SET packageName=@packageName, description=@description, 
+      totalValue=@totalValue, quantity=@quantity, updatedAt=GETDATE()
       WHERE packageID=@packageID
     `);
 };
@@ -274,38 +279,52 @@ export const getPackageItems = async (packageID) => {
   const res = await pool.request()
     .input("packageID", sql.Int, packageID)
     .query(`
-      SELECT i.packageItemID, i.packageID, i.productID, p.productName, p.price, i.quantity
+      SELECT 
+        i.packageItemID, i.packageID, i.productID, p.productName, p.price, i.quantity,
+        p.sizeId, s.size , p.categoryID, c.categoryName  
       FROM sg.LQ_CSS_fnb_package_items i
       INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
+      LEFT JOIN sg.LQ_CSS_product_sizes s ON p.sizeId = s.sizeId
+      LEFT JOIN sg.LQ_CSS_fnb_categories c ON p.categoryID = c.categoryID
       WHERE i.packageID = @packageID
     `);
 
-  const items = res.recordset || [];
-
-  const pkgRes = await pool.request()
-    .input("packageID", sql.Int, packageID)
-    .query("SELECT totalValue FROM sg.LQ_CSS_fnb_packages WHERE packageID=@packageID");
-
-  if (!pkgRes.recordset.length) return { items: [], remainingValue: 0 };
-
-  const totalValue = pkgRes.recordset[0].totalValue;
-  const totalUsed = items.reduce((sum, i) => sum + (i.price * i.quantity), 0);
-  const remainingValue = totalValue - totalUsed;
-
-  return { items, remainingValue };
+  // Return only items (no remainingValue)
+  return res.recordset || [];
 };
 
-export const addPackageItem = async (packageID, productID, quantity) => {
+export const addPackageItem = async (packageID, productID) => {
   const pool = await poolPromise;
-  await pool.request()
+
+  // Check package exists
+  const pkgRes = await pool.request()
+    .input("packageID", sql.Int, packageID)
+    .query("SELECT quantity FROM sg.LQ_CSS_fnb_packages WHERE packageID=@packageID");
+
+  if (!pkgRes.recordset.length) throw new Error("Package not found");
+
+  // Check if product already exists in package
+  const existingRes = await pool.request()
     .input("packageID", sql.Int, packageID)
     .input("productID", sql.Int, productID)
-    .input("quantity", sql.Int, quantity)
-    .query(`
-      INSERT INTO sg.LQ_CSS_fnb_package_items 
-      (packageID, productID, quantity) 
-      VALUES (@packageID, @productID, @quantity)
-    `);
+    .query("SELECT packageItemID FROM sg.LQ_CSS_fnb_package_items WHERE packageID=@packageID AND productID=@productID");
+
+  if (existingRes.recordset.length > 0) {
+    return { merged: true, packageItemID: existingRes.recordset[0].packageItemID };
+  } else {
+    const insertRes = await pool.request()
+      .input("packageID", sql.Int, packageID)
+      .input("productID", sql.Int, productID)
+      .input("quantity", sql.Int, 0)  // initial quantity 0
+      .query(`
+        INSERT INTO sg.LQ_CSS_fnb_package_items (packageID, productID, quantity)
+        VALUES (@packageID, @productID, @quantity);
+        SELECT SCOPE_IDENTITY() AS packageItemID;
+      `);
+
+    const packageItemID = insertRes.recordset?.[0]?.packageItemID || null;
+    return { merged: false, packageItemID };
+  }
 };
 
 export const deletePackageItem = async (packageItemID) => {
@@ -346,72 +365,132 @@ export const updatePackageItem = async (packageID, itemId, quantity) => {
 };
 
 // -------------------- Validation: check package total --------------------
-export const canAddPackageItem = async (packageID, productID, quantity) => {
+export const canAddPackageItem = async (packageID, addQuantity) => {
   const pool = await poolPromise;
 
-  // Get package
   const pkgRes = await pool.request()
     .input("packageID", sql.Int, packageID)
-    .query("SELECT totalValue FROM sg.LQ_CSS_fnb_packages WHERE packageID=@packageID");
+    .query("SELECT quantity FROM sg.LQ_CSS_fnb_packages WHERE packageID=@packageID");
+
   if (!pkgRes.recordset.length) throw new Error("Package not found");
-  const totalValue = pkgRes.recordset[0].totalValue;
 
-  // Get current items
-  const itemsRes = await pool.request()
+  const packageQtyLimit = Number(pkgRes.recordset[0].quantity || 0);
+
+  const totalRes = await pool.request()
     .input("packageID", sql.Int, packageID)
-    .query(`
-      SELECT i.quantity, p.price
-      FROM sg.LQ_CSS_fnb_package_items i
-      INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
-      WHERE i.packageID=@packageID
-    `);
-  const packageItems = itemsRes.recordset;
+    .query("SELECT ISNULL(SUM(quantity),0) AS totalQty FROM sg.LQ_CSS_fnb_package_items WHERE packageID=@packageID");
 
-  // Get product price
-  const productRes = await pool.request()
-    .input("productID", sql.Int, productID)
-    .query("SELECT price FROM sg.LQ_CSS_fnb_products WHERE productID=@productID");
-  if (!productRes.recordset.length) throw new Error("Product not found");
-  const productPrice = productRes.recordset[0].price;
-
-  const totalUsed = packageItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
-  const newTotal = totalUsed + (productPrice * quantity);
+  const currentTotal = Number(totalRes.recordset[0].totalQty || 0);
+  const newTotal = currentTotal + Number(addQuantity || 0);
 
   return {
-    canAdd: newTotal <= totalValue,
-    remainingValue: totalValue - totalUsed,
-    extraCharge: newTotal > totalValue ? newTotal - totalValue : 0
+    canAdd: newTotal <= packageQtyLimit,
+    packageQtyLimit,
+    currentTotal,
+    newTotal
   };
 };
+
+export const consumePackageItem = async (packageID, productID, consumeQty) => {
+  const pool = await poolPromise;
+
+  // Get package quantity limit
+  const pkgRes = await pool.request()
+    .input("packageID", sql.Int, packageID)
+    .query("SELECT quantity FROM sg.LQ_CSS_fnb_packages WHERE packageID=@packageID");
+  if (!pkgRes.recordset.length) throw new Error("Package not found");
+
+  const packageQtyLimit = Number(pkgRes.recordset[0].quantity);
+
+  // Current total consumed quantity
+  const totalRes = await pool.request()
+    .input("packageID", sql.Int, packageID)
+    .query("SELECT ISNULL(SUM(quantity),0) AS totalQty FROM sg.LQ_CSS_fnb_package_items WHERE packageID=@packageID");
+
+  const currentTotal = Number(totalRes.recordset[0].totalQty || 0);
+  const newTotal = currentTotal + Number(consumeQty);
+
+  if (newTotal > packageQtyLimit) {
+    throw new Error("Not enough quantity in package");
+  }
+
+  // Increase the quantity of the specific product
+  const existingRes = await pool.request()
+    .input("packageID", sql.Int, packageID)
+    .input("productID", sql.Int, productID)
+    .query("SELECT packageItemID, quantity FROM sg.LQ_CSS_fnb_package_items WHERE packageID=@packageID AND productID=@productID");
+
+  if (!existingRes.recordset.length) throw new Error("Product not found in package");
+
+  const packageItemID = existingRes.recordset[0].packageItemID;
+  const updatedQty = existingRes.recordset[0].quantity + Number(consumeQty);
+
+  await pool.request()
+    .input("packageItemID", sql.Int, packageItemID)
+    .input("quantity", sql.Int, updatedQty)
+    .query("UPDATE sg.LQ_CSS_fnb_package_items SET quantity=@quantity WHERE packageItemID=@packageItemID");
+
+  return { packageItemID, quantity: updatedQty };
+};
+
+export const addPackageItemQuantity = async (packageID, productID, quantity) => {
+  const canAdd = await canAddPackageItem(packageID, quantity);
+  if (!canAdd.canAdd) throw new Error(`Cannot add ${quantity} items: exceeds package total quantity`);
+
+  const pool = await poolPromise;
+
+  // Check if product already exists in package
+  const existing = await pool.request()
+    .input("packageID", sql.Int, packageID)
+    .input("productID", sql.Int, productID)
+    .query("SELECT packageItemID, quantity FROM sg.LQ_CSS_fnb_package_items WHERE packageID=@packageID AND productID=@productID");
+
+  if (!existing.recordset.length) throw new Error("Product not found in package");
+
+  const newQty = Number(existing.recordset[0].quantity || 0) + Number(quantity);
+
+  await pool.request()
+    .input("quantity", sql.Int, newQty)
+    .input("packageItemID", sql.Int, existing.recordset[0].packageItemID)
+    .query("UPDATE sg.LQ_CSS_fnb_package_items SET quantity=@quantity WHERE packageItemID=@packageItemID");
+
+  return { packageItemID: existing.recordset[0].packageItemID, quantity: newQty };
+};
+
 
 export const canUpdatePackageItem = async (packageID, packageItemID, newQuantity) => {
   const pool = await poolPromise;
 
-  // Get package total
+  // Get package quantity limit
   const pkgRes = await pool.request()
     .input("packageID", sql.Int, packageID)
-    .query("SELECT totalValue FROM sg.LQ_CSS_fnb_packages WHERE packageID=@packageID");
-  if (!pkgRes.recordset.length) throw new Error("Package not found");
-  const totalValue = pkgRes.recordset[0].totalValue;
+    .query("SELECT quantity FROM sg.LQ_CSS_fnb_packages WHERE packageID=@packageID");
 
-  // Get all items and prices
+  if (!pkgRes.recordset.length) throw new Error("Package not found");
+  const packageQtyLimit = Number(pkgRes.recordset[0].quantity || 0);
+
+  // Get all items and compute total with replaced qty for the target item
   const itemsRes = await pool.request()
     .input("packageID", sql.Int, packageID)
     .query(`
-      SELECT i.packageItemID, i.quantity, p.price
-      FROM sg.LQ_CSS_fnb_package_items i
-      INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
-      WHERE i.packageID=@packageID
+      SELECT packageItemID, quantity
+      FROM sg.LQ_CSS_fnb_package_items
+      WHERE packageID = @packageID
     `);
 
-  let totalUsed = 0;
-  for (const item of itemsRes.recordset) {
-    if (item.packageItemID === parseInt(packageItemID)) {
-      totalUsed += item.price * newQuantity;
+  let totalQty = 0;
+  for (const it of itemsRes.recordset) {
+    if (Number(it.packageItemID) === Number(packageItemID)) {
+      totalQty += Number(newQuantity || 0);
     } else {
-      totalUsed += item.price * item.quantity;
+      totalQty += Number(it.quantity || 0);
     }
   }
 
-  return totalUsed <= totalValue;
+  return {
+    canUpdate: totalQty <= packageQtyLimit,
+    packageQtyLimit,
+    totalQty
+  };
 };
+

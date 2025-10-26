@@ -10,50 +10,54 @@ import { generateQrDataUrl } from "../utils/qr_generator.js";
 // Client login
 export const clientLogin = async (req, res) => {
   try {
-    const { userName, pin } = req.body;
+    // Accept clientID from query (QR) or body
+    const clientID = req.query.clientID
+      ? parseInt(req.query.clientID, 10)
+      : req.body.clientID
+      ? parseInt(req.body.clientID, 10)
+      : null;
 
-    const client = await Clients.getClientByPin(pin);
-    if (!client) return error(res, "Invalid PIN or no active booking", 400);
+    const { pin, userName } = req.body;
 
-    const existingSession = await Sessions.getActiveSession(userName, pin);
-    if (existingSession) {
-      return success(res, {
-        sessionId: existingSession.sessionID,
-        expiresAt: existingSession.expires_at,
-        clientID: client.clientID,
-        deceasedName: client.deceasedName,
-        chapelID: client.chapelID,
-        chapelName: client.chapelname,
-        packageNo: client.packageNo,
-        packageName: client.packageName
-      }, "Session active");
-    }
+    if (!clientID || isNaN(clientID)) return error(res, "clientID is required", 400);
+    if (!pin) return error(res, "PIN is required", 400);
 
-    const expiresAt = new Date(Date.now() + 6 * 60 * 60 * 1000);
-    const qrDataUrl = await generateQrDataUrl({
-      chapelID: client.chapelID,
-      packageNo: client.packageNo,
-      pin,
-      deceasedName: client.deceasedName,
-      chapelName: client.chapelName,
-      packageName: client.packageName
+    // Fetch client info
+    const client = await Clients.getClientById(clientID);
+    if (!client) return error(res, "Client not found", 404);
+    if (client.status !== "Active") return error(res, "Client inactive", 400);
+
+    // Generate today’s PIN
+    const todayPin = Clients.generateDailyPin(clientID);
+    if (pin !== todayPin) return error(res, "Invalid PIN", 400);
+
+    // Create a new session (allow multiple sessions)
+    const expiresAt = new Date(Date.now() + 6 * 60 * 60 * 1000); // 6 hours
+    const qrDataUrl = await generateQrDataUrl({ clientID });
+
+    const sessionId = await Sessions.createSession({
+      clientID,
+      userName: userName || client.deceasedName || `client-${clientID}`,
+      pin: todayPin,
+      qrDataUrl,
+      expiresAt,
     });
 
-    const sessionId = await Sessions.createSession({ clientID: client.chapelID, userName, pin, qrDataUrl, expiresAt});
-
+    // Return full info
     return success(res, {
       sessionId,
-      expiresAt,
       clientID: client.clientID,
       deceasedName: client.deceasedName,
       chapelID: client.chapelID,
       chapelName: client.chapelName,
       packageNo: client.packageNo,
-      packageName: client.packageName
-    }, "Logged in successfully");
+      packageName: client.packageName,
+      expiresAt,
+    }, "Login success");
+
   } catch (e) {
-    console.error("❌ ClientLogin error", e);
-    return error(res, e.message);
+    console.error("❌ ClientLogin Error:", e);
+    return error(res, e.message || "Server error");
   }
 };
 // ----------------------PUT-------------------------

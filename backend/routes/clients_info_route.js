@@ -6,9 +6,9 @@ const router = express.Router();
 // ----------------------GET-------------------------
 // Get all clients
 router.get("/", staffAuth, Controller.getAllClients);
-// Get client by PIN
+// Get client by PIN (put first)
 router.get("/pin/:pin", staffAuth, Controller.getClientByPin);
-// Get client by ID
+// Get client by ID (after PIN route)
 router.get("/:clientID", staffAuth, Controller.getClientById);
 // ----------------------POST-------------------------
 // Register a new client
@@ -23,5 +23,10 @@ router.put("/:clientID/balance", staffAuth, Controller.raiseBalance);
 // ----------------------DELETE-------------------------
 // Delete client by ID
 router.delete("/:clientID", staffAuth, Controller.deleteClient);
+// ----------------------Summary-------------------------
+// Client dashboard with package items & summary
+router.get("/:clientID/dashboard", staffAuth, Controller.getClientDashboard);
+// add after dashboard route
+router.get("/:clientID/pin/today", staffAuth, Controller.getTodayPinForCashier);
 
 export default router;

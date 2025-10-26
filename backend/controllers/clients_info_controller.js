@@ -1,20 +1,20 @@
 // controllers/clients_info_controller.js
 import * as Model from "../models/clients_info_model.js";
+import { createSession } from "../models/sessions_info_model.js";
 import { success, error } from "../utils/response_helper.js";
 
-// ----------------------GET-------------------------
-// Get all clients
+// GET all clients
 export const getAllClients = async (req, res) => {
   try {
     const data = await Model.getAllClient();
     return success(res, data, "Clients list fetched successfully");
   } catch (e) {
-    console.error("GetAllClients Error:", e);
+    console.error("❌ GetAllClients Error:", e);
     return error(res, e.message);
   }
 };
 
-// Get client by PIN
+// Get client by PIN (staff)
 export const getClientByPin = async (req, res) => {
   try {
     const pin = req.params.pin;
@@ -26,139 +26,210 @@ export const getClientByPin = async (req, res) => {
   }
 };
 
-// Get client by ID
+// Get client by ID (staff)
 export const getClientById = async (req, res) => {
   try {
-    const { clientID } = req.params;
+    const clientID = parseInt(req.params.clientID, 10);
+    if (isNaN(clientID)) return error(res, "Invalid clientID", 400);
 
-    if (!clientID || isNaN(clientID)) {
-      return error(res, "Invalid or missing clientID", 400);
-    }
+    const raw = await Model.getClientById(clientID);
+    if (!raw) return error(res, "Client not found", 404);
+    const client = (raw && Model.mapClientRow) ? Model.mapClientRow(raw) : raw; // optional mapping
 
-    const data = await Model.getClientById(parseInt(clientID));
-
-    if (!data) {
-      return error(res, "Client not found", 404);
-    }
-
-    return success(res, data, "Client fetched successfully");
+    // Include package summary (D3)
+    const packageSummary = await Model.getClientPackageSummary(clientID);
+    return success(res, { ...client, packageSummary }, "Client fetched successfully");
   } catch (e) {
     console.error("❌ getClientById error:", e);
     return error(res, e.message || "Internal server error");
   }
 };
 
-// ----------------------POST-------------------------
-// Register a new client
+// Register client (staff)
 export const registerClient = async (req, res) => {
   try {
-    const userName = req.user?.name || "unknown"; // assuming auth middleware sets req.user
-    const clientData = req.body;
-
-    // Call the updated model function
-    const result = await Model.registerClientWithQR(clientData, userName);
-
-    return success(res, result, "Client registered successfully");
+    const userName = req.user?.name || "unknown";
+    const result = await Model.registerClientWithQR(req.body, userName);
+    return success(res, result, "Client registered successfully with packages");
   } catch (e) {
-    console.error("Error registering client:", e);
-    return error(res, e.message || "Failed to register client");
-  }
-};
-
-// Client login
-export const clientLogin = async (req, res) => {
-  try {
-    const { userName, pin } = req.body;
-    const client = await Model.getClientByPin(pin);
-
-    if (!client || client.status !== "Active") {
-      return error(res, "Invalid PIN or inactive", 400);
-    }
-
-    const qr = await Model.generateQrDataUrl({
-      chapelID: client.chapelID,
-      packageNo: client.packageNo,
-      pin,
-    });
-
-    const sessionId = await Model.createSession({
-      clientID: client.clientID,
-      userName,
-      pin,
-      qrDataUrl: qr,
-      expiresAt: new Date(Date.now() + 6 * 60 * 60 * 1000), // 6 hours
-    });
-
-    return success(res, { sessionId, clientID: client.clientID, expiresAt: new Date(Date.now() + 6 * 60 * 60 * 1000) }, "Login successful");
-  } catch (e) {
+    console.error("❌ Register Error:", e);
     return error(res, e.message);
   }
 };
 
-// ----------------------PUT-------------------------
-// Update client information
+// Client login (QR or clientID + pin). Public route.
+export const clientLogin = async (req, res) => {
+  try {
+    const clientSecret = req.query.secret;
+    const { userName, pin } = req.body;
+
+    if (!clientSecret || !pin) return error(res, "Invalid PIN");
+
+    // 1. Get client by QR secret
+    const client = await Clients.getClientBySecret(clientSecret);
+    if (!client) return error(res, "Invalid PIN");
+
+    // 2. Must be Active
+    if (client.status !== "Active") return error(res, "Invalid PIN");
+
+    // 3. Validate schedule window (B1 + D2)
+    const now = new Date();
+    const start = new Date(client.schedule_from);
+    const end = new Date(client.schedule_to);
+
+    if (now < start || now > end) {
+      return error(res, "Your session schedule has expired or not yet started");
+    }
+
+    // 4. Daily PIN check
+    const todayPin = Clients.generateDailyPin(client.clientID);
+    if (pin !== todayPin) return error(res, "Invalid PIN");
+
+    // 5. Create session (always allowed inside schedule)
+    const expiresAt = new Date(Date.now() + 6 * 60 * 60 * 1000); // 6 hours
+    const sessionId = await Sessions.createSession({
+      clientID: client.clientID,
+      userName: userName || client.deceasedName || `client-${client.clientID}`,
+      pin: todayPin,
+      qrDataUrl: null,
+      expiresAt
+    });
+
+    // 6. Respond exactly as you wanted
+    return success(res, {
+      sessionId,
+      clientID: client.clientID,
+      deceasedName: client.deceasedName,
+      chapelID: client.chapelID,
+      chapelName: client.chapelName,
+      packageNo: client.packageNo,
+      packageName: client.packageName,
+      expiresAt
+    }, "Login success");
+
+  } catch (e) {
+    console.error("❌ ClientLogin error", e);
+    return error(res, e.message || "Server error");
+  }
+};
+
+// Consume item (staff/cashier or kiosk with session)
+export const consumeItem = async (req, res) => {
+  try {
+    const clientID = parseInt(req.params.clientID || req.body.clientID, 10);
+    if (isNaN(clientID)) return error(res, "Invalid clientID", 400);
+
+    const { productID, qty } = req.body;
+    if (!productID || isNaN(Number(productID))) return error(res, "productID is required", 400);
+    if (!qty || isNaN(Number(qty)) || Number(qty) <= 0) return error(res, "qty must be a positive number", 400);
+
+    const result = await Model.consumeClientItem(clientID, Number(productID), Number(qty));
+    if (!result || result.success === false) return error(res, result?.message || "Consume failed", 400);
+
+    return success(res, result, "Consumed successfully");
+  } catch (e) {
+    console.error("❌ ConsumeItem Error:", e);
+    return error(res, e.message || "Server error");
+  }
+};
+
+// Add package (staff)
+export const addPackage = async (req, res) => {
+  try {
+    const clientID = parseInt(req.params.clientID, 10);
+    if (isNaN(clientID)) return error(res, "Invalid clientID", 400);
+
+    const { packageID } = req.body;
+    if (!packageID || isNaN(Number(packageID))) return error(res, "packageID is required", 400);
+
+    const result = await Model.addPackageToClient(clientID, Number(packageID));
+    return success(res, result, "Package added successfully");
+  } catch (e) {
+    console.error("❌ AddPackage Error:", e);
+    return error(res, e.message || "Server error");
+  }
+};
+
+// Update client (staff)
 export const update = async (req, res) => {
   try {
     const clientID = req.params.clientID;
     const fieldsToUpdate = req.body || {};
+    if (!clientID) return error(res, "ClientID is required", 400);
+    if (Object.keys(fieldsToUpdate).length === 0) return error(res, "No fields provided to update", 400);
 
-    if (!clientID){
-      return res.status(400).json({success: false, message: "ClientID is required in params" });
-    }
-
-    if (Object.keys(fieldsToUpdate).length === 0){
-      return res.status(400).json({success: false, message: "No fields provided to update"});
-    }
-
-    const updated = await Model.updateClient({ clientID, ...fieldsToUpdate});
-
-    if(!updated){
-      return res.status(400).json({success: false, message: "Client not found or no changes applied"});
-    }
-
-    return res.json({success: true, message: "Client updated successfully"});
+    const updated = await Model.updateClient({ clientID, ...fieldsToUpdate });
+    if (!updated) return error(res, "Client not found or no changes applied", 400);
+    return success(res, null, "Client updated successfully");
   } catch (e) {
-    console.error("Update Client Error:", e);
-    return res.status(500).json({success: false, message: e.message || "Server error"});
+    console.error("❌ Update Client Error:", e);
+    return error(res, e.message || "Server error");
   }
 };
 
-// Raise client balance
+// Raise balance (staff)
 export const raiseBalance = async (req, res) => {
   try {
     const clientID = req.params.clientID;
     const { amount, type } = req.body;
-
-    if (!clientID) return error(res, "ClientID is required in params", 404);
-    if (!amount) return error(res, "Aomunt is required", 400);
+    if (!clientID) return error(res, "ClientID is required", 404);
+    if (!amount) return error(res, "Amount is required", 400);
 
     await Model.raiseBalance(clientID, amount, type);
     return success(res, null, "Balance updated successfully");
   } catch (e) {
-    console.error("Raise Balance Error:", e);
+    console.error("❌ Raise Balance Error:", e);
     return error(res, e.message);
   }
 };
 
-// ----------------------DELETE-------------------------
-// Delete client
+// Delete client (staff)
 export const deleteClient = async (req, res) => {
   try {
     const clientID = parseInt(req.params.clientID, 10);
-
-    if (isNaN(clientID)) {
-      return res.status(400).json({ success: false, message: "Invalid client ID" });
-    }
+    if (isNaN(clientID)) return error(res, "Invalid client ID", 400);
 
     const deleted = await Model.deleteClient(clientID);
-
-    if (!deleted) {
-      return res.status(404).json({ success: false, message: "Client not found" });
-    }
-
-    return res.json({ success: true, message: "Client deleted successfully" });
+    if (!deleted) return error(res, "Client not found", 404);
+    return success(res, null, "Client deleted successfully");
   } catch (err) {
-    console.error("Error deleting client:", err);
-    return res.status(500).json({ success: false, message: "Server error" });
+    console.error("❌ Error deleting client:", err);
+    return error(res, "Server error");
+  }
+};
+
+// GET client dashboard (package items + summary)
+export const getClientDashboard = async (req, res) => {
+  try {
+    const clientID = parseInt(req.params.clientID, 10);
+    if (isNaN(clientID)) return error(res, "Invalid clientID", 400);
+
+    const dashboard = await Model.getClientWithPackageSummary(clientID);
+    if (!dashboard) return error(res, "Client not found", 404);
+
+    // Return exactly the structure you requested
+    return success(res, dashboard, "Client dashboard loaded");
+  } catch (e) {
+    console.error("❌ getClientDashboard Error:", e);
+    return error(res, e.message || "Server error");
+  }
+};
+
+// GET today's PIN for cashier (staff)
+export const getTodayPinForCashier = async (req, res) => {
+  try {
+    const clientID = parseInt(req.params.clientID, 10);
+    if (isNaN(clientID)) return error(res, "Invalid clientID", 400);
+
+    const auth = await Model.getClientAuthData(clientID);
+    if (!auth) return error(res, "Client not found", 404);
+
+    const todayPin = Model.generateDailyPin(auth.clientID);
+    const defaultAllowed = await Model.isDefaultPackageAllowed(clientID);
+
+    return success(res, { todayPin, defaultAllowed, scheduleFrom: auth.schedule_from, scheduleTo: auth.schedule_to }, "Today's PIN fetched");
+  } catch (e) {
+    console.error("❌ getTodayPinForCashier Error:", e);
+    return error(res, e.message || "Server error");
   }
 };
