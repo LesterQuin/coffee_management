@@ -40,14 +40,14 @@ export const listPackagesByChapel = async (req, res) => {
 // Create a new chapel room
 export const create = async (req, res) => {
   try {
-    const { chapelName, description } = req.body;
+    const { chapelName, description, packageID, statusId } = req.body;
 
     if (!chapelName){
-      return error(res, "Both ChapelName is required", 400);
+      return error(res, "ChapelName is required", 400);
     }
 
-    await Model.createChapel(chapelName, description);
-    return success(res, null, "Chapel created successfully");
+    const chapel = await Model.createChapelWithPackage(chapelName, description, packageID, statusId);
+    return success(res, chapel, "Chapel created successfully");
   } catch (e) {
     return error(res, e.message);
   }
@@ -57,13 +57,10 @@ export const create = async (req, res) => {
 // update chapel details
 export const updateChapel = async(req, res) => {
   const { chapelID } = req.params;
-  const { chapelName, description } = req.body;
-
-  console.log("Updating chapel ID:", chapelID);
-  console.log("Payload:", { chapelName, description });
+  const { chapelName, description, packageID, statusId } = req.body;
 
   try {
-    const updated = await Model.updateChapel(chapelID, chapelName, description);
+    const updated = await Model.updateChapel(chapelID, chapelName, description, statusId, packageID);
 
     if (!updated) {
       return res.status(404).json({ success: false, message: "Chapel not found or no fields to update" });
