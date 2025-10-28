@@ -28,5 +28,7 @@ router.delete("/:clientID", staffAuth, Controller.deleteClient);
 router.get("/:clientID/dashboard", staffAuth, Controller.getClientDashboard);
 // add after dashboard route
 router.get("/:clientID/pin/today", staffAuth, Controller.getTodayPinForCashier);
+// Get client package summary
+router.get("/:clientID/package/summary", staffAuth, Controller.getClientPackageSummaryController);
 
 export default router;
