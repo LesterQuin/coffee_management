@@ -5,10 +5,6 @@ import { createSession } from "./sessions_info_model.js";
 import crypto from "crypto";
 
 // -------------------- Timezone helper --------------------
-/**
- * Return a Date object set to Manila (UTC+8) corresponding to "now".
- * This ensures PIN rolls over at 00:00 Manila time.
- */
 const nowManila = () => {
   const now = new Date();
   const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
@@ -16,9 +12,7 @@ const nowManila = () => {
   return new Date(manilaMs);
 };
 
-/* -------------------------
-  Helpers & validators
-------------------------- */
+// -------------------- Helpers & validators --------------------
 const isValidPhone = (phone) => {
   if (typeof phone !== "string") return false;
   const trimmed = phone.trim();
@@ -55,18 +49,11 @@ export const generateClientSecret = () => crypto.randomBytes(16).toString("hex")
 // generate daily 6-digit PIN from clientSecret and date (YYYY-MM-DD)
 export const generateDailyPin = (clientID, dateOverride = null) => {
   if (!clientID) throw new Error("clientID required to generate PIN");
-
-  // Use Manila date (YYYYMMDD) so PIN changes at 00:00 Manila
-  const d = dateOverride
-    ? new Date(dateOverride)
-    : nowManila();
-
-  // Format YYYYMMDD
+  const d = dateOverride ? new Date(dateOverride) : nowManila();
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   const dateStr = `${yyyy}${mm}${dd}`;
-
   const seed = `${clientID}${dateStr}`;
   const hash = crypto.createHash("sha256").update(seed).digest("hex");
   const num = parseInt(hash.slice(0, 8), 16) % 1000000;
@@ -78,9 +65,11 @@ export const assignDefaultPackageToClient = async (clientID) => {
   const pool = await poolPromise;
   const defaultRes = await pool.request()
     .query(`SELECT TOP 1 packageID FROM sg.LQ_CSS_default_package ORDER BY createdAt DESC, defaultID DESC`);
+  
   const packageID = defaultRes.recordset?.[0]?.packageID;
   if (!packageID) return null;
 
+  // Insert default package items with the package's predefined quantities
   await pool.request()
     .input("clientID", sql.Int, clientID)
     .input("packageID", sql.Int, packageID)
@@ -91,50 +80,59 @@ export const assignDefaultPackageToClient = async (clientID) => {
         @clientID,
         pi.packageID,
         pi.productID,
-        pi.quantity,
+        pi.quantity,       -- quantity comes from package definition
         1,
         GETDATE()
       FROM sg.LQ_CSS_fnb_package_items pi
       WHERE pi.packageID = @packageID
     `);
 
+  // Update client_info.packageNo
   await pool.request()
     .input("clientID", sql.Int, clientID)
-    .input("packageID", sql.Int, packageID)
-    .query(`UPDATE sg.LQ_CSS_client_info SET packageNo = @packageID WHERE clientID = @clientID`);
+    .input("packageNo", sql.Int, packageID)
+    .query(`UPDATE sg.LQ_CSS_client_info SET packageNo = @packageNo WHERE clientID = @clientID`);
 
   return packageID;
 };
 
-export const addPackageToClient = async (clientID, packageID) => {
+export const addPackageToClient = async (clientID, packageID, isDefault = 0) => {
   const pool = await poolPromise;
+  
+  // Fetch package items with their default quantities
   const packageItems = await pool.request()
     .input("packageID", sql.Int, packageID)
     .query(`SELECT productID, quantity FROM sg.LQ_CSS_fnb_package_items WHERE packageID = @packageID`);
 
-  if (packageItems.recordset.length === 0) {
+  if (!packageItems.recordset.length) {
     return { success: false, message: "Package not found or has no items" };
   }
 
   for (const item of packageItems.recordset) {
     const { productID, quantity } = item;
+
+    // Check if client already has this product
     const existing = await pool.request()
       .input("clientID", sql.Int, clientID)
       .input("productID", sql.Int, productID)
       .query(`SELECT clientPackageItemID, quantity FROM sg.LQ_CSS_client_package_items WHERE clientID = @clientID AND productID = @productID`);
 
     if (existing.recordset.length > 0) {
+      // Sum with existing quantity (for extra packages)
+      const newQty = Number(existing.recordset[0].quantity || 0) + Number(quantity || 0);
       await pool.request()
         .input("clientPackageItemID", sql.Int, existing.recordset[0].clientPackageItemID)
-        .input("newQty", sql.Int, existing.recordset[0].quantity + quantity)
+        .input("newQty", sql.Decimal(18,2), newQty)
         .query(`UPDATE sg.LQ_CSS_client_package_items SET quantity = @newQty WHERE clientPackageItemID = @clientPackageItemID`);
     } else {
+      // Insert with package default quantity
       await pool.request()
         .input("clientID", sql.Int, clientID)
         .input("productID", sql.Int, productID)
-        .input("quantity", sql.Int, quantity)
+        .input("quantity", sql.Decimal(18,2), quantity || 0)
         .input("packageID", sql.Int, packageID)
-        .query(`INSERT INTO sg.LQ_CSS_client_package_items (clientID, productID, quantity, packageID, isDefault) VALUES (@clientID, @productID, @quantity, @packageID, 0)`);
+        .input("isDefault", sql.Bit, isDefault ? 1 : 0)
+        .query(`INSERT INTO sg.LQ_CSS_client_package_items (clientID, productID, quantity, packageID, isDefault, createdAt) VALUES (@clientID, @productID, @quantity, @packageID, @isDefault, GETDATE())`);
     }
   }
 
@@ -178,10 +176,9 @@ export const getClientById = async (clientID) => {
   const result = await pool.request()
     .input("clientID", sql.Int, clientID)
     .query(`SELECT * FROM sg.LQ_CSS_client_info WHERE clientID = @clientID`);
-  return result.recordset[0] ? result.recordset[0] : null; // return raw row (controller can map)
+  return result.recordset[0] ? result.recordset[0] : null;
 };
 
-// returns raw client row (includes clientSecret) by pin
 export const getClientByPin = async (pin) => {
   const pool = await poolPromise;
   const result = await pool.request()
@@ -217,10 +214,8 @@ export const getClientWithPackageSummary = async (clientID) => {
     { defaultTotal: 0, additionalTotal: 0 }
   );
 
-  // ✅ Daily PIN (using your existing PIN column — NOT regenerating)
   const todayPin = client.pin || null;
 
-  // ✅ Validate schedule (scheduleValid = is today between from–to)
   const today = new Date();
   const from = new Date(client.scheduleFrom);
   const to = new Date(client.scheduleTo);
@@ -228,21 +223,18 @@ export const getClientWithPackageSummary = async (clientID) => {
     today.setHours(0, 0, 0, 0) >= from.setHours(0, 0, 0, 0) &&
     today.setHours(0, 0, 0, 0) <= to.setHours(0, 0, 0, 0);
 
-  // ✅ PIN expires tonight 23:59:59
   const expiresAt = (() => {
     const d = new Date();
     d.setHours(23, 59, 59, 999);
     return d.toISOString();
   })();
 
-  // ✅ Minimal order summary for now
   const orderSummary = {
     totalOrders: 0,
     completed: 0,
     pending: 0
   };
 
-  // ✅ PIN included here
   return {
     clientID: client.clientID,
     deceasedName: client.deceasedName,
@@ -250,13 +242,13 @@ export const getClientWithPackageSummary = async (clientID) => {
     scheduleFrom: client.scheduleFrom,
     scheduleTo: client.scheduleTo,
     packageName: client.packageName,
-    pin: client.pin,                   
+    pin: client.pin,
     packageBalance: client.packageBalance,
     additionalBalance: client.additionalBalance,
     status: client.status,
     createdAt: client.createdAt,
     updatedAt: client.updatedAt,
-    qrDataUrl: client.qrDataUrl,       // (optional but useful for dashboard)
+    qrDataUrl: client.qrDataUrl,
     packageItems,
     packageSummary: summary
   };
@@ -315,12 +307,10 @@ export const isDefaultPackageAllowed = async (clientID, forDate = null) => {
   const from = new Date(auth.schedule_from);
   const to = new Date(auth.schedule_to);
 
-  // default usage allowed up to (schedule_to - 1 day)
   const lastAllowed = new Date(to);
   lastAllowed.setDate(lastAllowed.getDate() - 1);
 
   const today = forDate ? new Date(forDate) : new Date();
-  // normalize date portion only
   const ymd = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
   return ymd(today) >= ymd(from) && ymd(today) <= ymd(lastAllowed);
 };
@@ -328,7 +318,8 @@ export const isDefaultPackageAllowed = async (clientID, forDate = null) => {
 // ---------------------- POST (register with clientSecret & static QR) -------------------------
 export const registerClientWithQR = async (client, userName) => {
   const pool = await poolPromise;
-  const pin = Math.floor(100000 + Math.random() * 900000).toString(); // legacy pin (you can ignore usage)
+  // KEEP your existing PIN logic UNCHANGED
+  const pin = Math.floor(100000 + Math.random() * 900000).toString(); // legacy pin (unchanged)
   const clientSecret = generateClientSecret();
 
   const insertResult = await pool.request()
@@ -356,37 +347,99 @@ export const registerClientWithQR = async (client, userName) => {
   const clientID = insertResult.recordset?.[0]?.clientID;
   if (!clientID) throw new Error("Failed to register client");
 
+  // 1) Always assign system default package (existing behavior) -> updates client_info.packageNo
   const assignedDefaultPackageID = await assignDefaultPackageToClient(clientID);
+
+  // 2) Determine selected/chapel package (priority: client.packageNo (explicit override) OR chapel.packageID (auto))
   let assignedSelectedPackageID = null;
+  let selectedPackageIdToAssign = null;
 
   if (client.packageNo) {
-    assignedSelectedPackageID = client.packageNo;
-    await addPackageToClient(clientID, client.packageNo);
+    selectedPackageIdToAssign = client.packageNo;
+  } else if (client.chapelID) {
+    const chapelRes = await pool.request()
+      .input("chapelID", sql.Int, client.chapelID)
+      .query(`SELECT packageID FROM sg.LQ_CSS_chapel_rooms WHERE chapelID = @chapelID`);
+    const chapelPackageID = chapelRes.recordset?.[0]?.packageID || null;
+    if (chapelPackageID) selectedPackageIdToAssign = chapelPackageID;
   }
 
+  if (selectedPackageIdToAssign) {
+    // mark chapel package items as default (isDefault = 1)
+    assignedSelectedPackageID = selectedPackageIdToAssign;
+    await addPackageToClient(clientID, selectedPackageIdToAssign, 1);
+    // DO NOT overwrite client_info.packageNo — keep default package as packageNo (Option 1)
+  }
+
+  // 3) Handle extraPackages[] (optional) -> isDefault = 0
+  const assignedExtraPackages = [];
+  if (Array.isArray(client.extraPackages) && client.extraPackages.length > 0) {
+    for (const extraPkgIdRaw of client.extraPackages) {
+      const extraPkgId = Number(extraPkgIdRaw);
+      if (!extraPkgId || isNaN(extraPkgId)) continue;
+      try {
+        const addRes = await addPackageToClient(clientID, extraPkgId, 0);
+        if (addRes && addRes.success) {
+          assignedExtraPackages.push({ packageID: extraPkgId, success: true });
+        } else {
+          assignedExtraPackages.push({ packageID: extraPkgId, success: false, message: addRes?.message || "Failed to add" });
+        }
+      } catch (e) {
+        assignedExtraPackages.push({ packageID: extraPkgId, success: false, message: e.message });
+      }
+    }
+  }
+
+  // 4) Fetch the assigned package items for response
   const itemsRes = await pool.request()
     .input("clientID", sql.Int, clientID)
-    .query(`SELECT clientPackageItemID, productID, quantity, isDefault, packageID FROM sg.LQ_CSS_client_package_items WHERE clientID = @clientID`);
-
+    .query(`SELECT clientPackageItemID, productID, quantity, isDefault, packageID FROM sg.LQ_CSS_client_package_items WHERE clientID = @clientID ORDER BY isDefault DESC, createdAt ASC`);
   const packageItems = itemsRes.recordset || [];
 
-  // Static QR points to clientID (not PIN)
+  // 5) Generate QR + create session (unchanged behavior)
   const qrDataUrl = await generateQrDataUrl({ clientID });
-
   const sessionID = await createSession({ clientID, userName, pin, qrDataUrl, expiresAt: new Date(Date.now() + 7*24*60*60*1000) });
 
+  // 6) Prepare package meta for frontend (names/descriptions) - safe numeric list
+  const packageMeta = [];
+  const packageIdsToFetch = new Set();
+  if (assignedDefaultPackageID) packageIdsToFetch.add(assignedDefaultPackageID);
+  if (assignedSelectedPackageID) packageIdsToFetch.add(assignedSelectedPackageID);
+  for (const e of assignedExtraPackages) if (e.success) packageIdsToFetch.add(e.packageID);
+
+  if (packageIdsToFetch.size > 0) {
+    const ids = Array.from(packageIdsToFetch).map(i => Number(i)).filter(Boolean);
+    if (ids.length > 0) {
+      const idsCsv = ids.join(",");
+      const pkgRes = await pool.request().query(`SELECT packageID, packageName, description FROM sg.LQ_CSS_fnb_packages WHERE packageID IN (${idsCsv})`);
+      for (const p of pkgRes.recordset) {
+        packageMeta.push({ packageID: p.packageID, packageName: p.packageName, description: p.description });
+      }
+    }
+  }
+
+  // 7) Final response object
   return {
     success: true,
     message: "Client registered successfully",
     data: {
-      client: { clientID, pin, clientSecret, qrDataUrl, sessionID, assignedDefaultPackageID, assignedSelectedPackageID },
-      packageItems
+      client: {
+        clientID,
+        pin,
+        clientSecret,
+        qrDataUrl,
+        sessionID,
+        assignedDefaultPackageID: assignedDefaultPackageID || null,
+        assignedSelectedPackageID: assignedSelectedPackageID || null,
+        assignedExtraPackages: assignedExtraPackages
+      },
+      packageItems,
+      packageMeta
     }
   };
 };
 
 export const generateQrDataUrl = async (payload) => {
-  // payload should contain clientID
   if (!payload || !payload.clientID) throw new Error("clientID required for QR");
   const loginUrl = `http://localhost:5000/clients/login?clientID=${encodeURIComponent(payload.clientID)}`;
   return QRCode.toDataURL(loginUrl, { errorCorrectionLevel: 'H', type: 'image/png', width: 300 });
@@ -595,13 +648,84 @@ export const deleteClient = async (clientID) => {
 
 export const getClientPackageSummary = async (clientID) => {
   const pool = await poolPromise;
-  const res = await pool.request()
+
+  const result = await pool.request()
     .input("clientID", sql.Int, clientID)
     .query(`
-      SELECT productID, SUM(quantity) AS totalQty, MIN(isDefault) AS isDefault
-      FROM sg.LQ_CSS_client_package_items
-      WHERE clientID = @clientID
-      GROUP BY productID
+      SELECT 
+          cpi.clientPackageItemID,
+          cpi.packageID,
+          fp.packageName,
+          cpi.productID,
+          p.productName,
+          p.price,
+          cpi.quantity,
+          p.sizeId,
+          s.size AS size,
+          p.categoryID,
+          c.categoryName,
+          CASE WHEN fp.packageID = cr.packageID THEN 1 ELSE 0 END AS isChapelSet,
+          CASE WHEN fp.packageID = dp.packageID THEN 1 ELSE 0 END AS isDefault
+      FROM sg.LQ_CSS_client_package_items cpi
+      LEFT JOIN sg.LQ_CSS_fnb_packages fp ON cpi.packageID = fp.packageID
+      LEFT JOIN sg.LQ_CSS_fnb_products p ON cpi.productID = p.productID
+      LEFT JOIN sg.LQ_CSS_product_sizes s ON p.sizeId = s.sizeId
+      LEFT JOIN sg.LQ_CSS_fnb_categories c ON p.categoryID = c.categoryID
+      LEFT JOIN sg.LQ_CSS_chapel_rooms cr ON cr.packageID = cpi.packageID
+      LEFT JOIN sg.LQ_CSS_default_package dp ON dp.packageID = cpi.packageID
+      WHERE cpi.clientID = @clientID
+      ORDER BY fp.packageID, cpi.clientPackageItemID
     `);
-  return res.recordset.map(r => ({ productID: r.productID, totalQty: Number(r.totalQty), isDefault: Boolean(r.isDefault) }));
+
+  const packageMap = {};
+
+  // Group products by package
+  result.recordset.forEach(item => {
+    if (!packageMap[item.packageID]) {
+      packageMap[item.packageID] = {
+        packageID: item.packageID,
+        packageName: item.packageName,
+        isDefault: item.isDefault === 1,
+        isChapelSet: item.isChapelSet === 1,
+        products: []
+      };
+    }
+
+    // Avoid duplicate products
+    if (!packageMap[item.packageID].products.some(p => p.packageItemID === item.clientPackageItemID)) {
+      packageMap[item.packageID].products.push({
+        packageItemID: item.clientPackageItemID,
+        productID: item.productID,
+        productName: item.productName,
+        price: item.price,
+        quantity: item.quantity,
+        sizeId: item.sizeId,
+        size: item.size,
+        categoryID: item.categoryID,
+        categoryName: item.categoryName
+      });
+    }
+  });
+
+  const packages = Object.values(packageMap);
+
+  // Identify chapel-set package
+  const chapelPackage = packages.find(p => p.isChapelSet);
+
+  const totalQuantity = chapelPackage
+    ? chapelPackage.products.reduce((sum, p) => sum + p.quantity, 0)
+    : 0;
+
+  const totalValue = chapelPackage
+    ? chapelPackage.products.reduce((sum, p) => sum + p.price * p.quantity, 0)
+    : 0;
+
+  const packageName = chapelPackage ? chapelPackage.packageName : null;
+
+  return {
+    packages,
+    totalQuantity,
+    totalValue,
+    packageName
+  };
 };

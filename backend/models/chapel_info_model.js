@@ -38,13 +38,68 @@ export const getAllChapels = async () => {
 // };
 
 // Get ID chapel by packages
-export const getPackageByChapel = async (chapelID) => {
+// export const getPackageByChapel = async (chapelID) => {
+//   const pool = await poolPromise;
+
+//   // 1. Get packageID from chapel
+//   const chapelRes = await pool.request()
+//     .input("chapelID", sql.Int, chapelID)
+//     .query(`
+//       SELECT packageID 
+//       FROM sg.LQ_CSS_chapel_rooms 
+//       WHERE chapelID = @chapelID
+//     `);
+
+//   if (chapelRes.recordset.length === 0) return [];
+
+//   const packageID = chapelRes.recordset[0].packageID;
+
+//   // 2. Get default package using packageID
+//   const defaultRes = await pool.request()
+//     .input("packageID", sql.Int, packageID)
+//     .query(`
+//       SELECT defaultID, packageID, createdAt
+//       FROM sg.LQ_CSS_default_package
+//       WHERE packageID = @packageID
+//     `);
+
+//   return defaultRes.recordset;
+// };
+
+export const listPackagesByChapel = async (chapelID) => {
   const pool = await poolPromise;
-  const result = await pool.request()
+
+  // Step 1: Get the chapel's assigned packageID
+  const chapelRes = await pool
+    .request()
     .input("chapelID", sql.Int, chapelID)
-    .query("SELECT * FROM sg.LQ_CSS_packages WHERE chapelID = @chapelID");
-  return result.recordset;
+    .query("SELECT packageID FROM sg.LQ_CSS_chapel_rooms WHERE chapelID = @chapelID");
+
+  if (chapelRes.recordset.length === 0) return [];
+
+  const packageID = chapelRes.recordset[0].packageID;
+
+  // Step 2: Get package info and default info
+  const packagesRes = await pool
+    .request()
+    .input("packageID", sql.Int, packageID)
+    .query(`
+      SELECT 
+        p.packageID,
+        p.packageName,
+        p.totalValue,
+        p.quantity,
+        dp.defaultID,
+        dp.createdAt
+      FROM sg.LQ_CSS_fnb_packages p
+      LEFT JOIN sg.LQ_CSS_default_package dp
+        ON p.packageID = dp.packageID
+      WHERE p.packageID = @packageID
+    `);
+
+  return packagesRes.recordset;
 };
+
 // ----------------------POST-------------------------
 // Create a new chapel room
 export const createChapelWithPackage = async (chapelName, description, packageID , statusId) => {
@@ -93,8 +148,8 @@ export const updateChapel = async (chapelID, chapelName, description, statusId, 
   if (!chapelID) throw new Error("chapelID is required");
 
   const pool = await poolPromise;
-
   const updates = [];
+
   if (chapelName !== undefined && chapelName !== "") updates.push("chapelName = @chapelName");
   if (description !== undefined && description !== "") updates.push("description = @description");
   if (statusId !== undefined && statusId !== "") updates.push("statusId = @statusId");
@@ -112,16 +167,11 @@ export const updateChapel = async (chapelID, chapelName, description, statusId, 
 
   if (chapelName !== undefined && chapelName !== "") request.input("chapelName", sql.NVarChar, chapelName);
   if (description !== undefined && description !== "") request.input("description", sql.NVarChar, description);
-  if (statusId !== undefined && statusId !== "") request.input("statusId", sql.NVarChar, statusId);
+  if (statusId !== undefined && statusId !== "") request.input("statusId", sql.Int, statusId);
   if (packageID !== undefined) request.input("packageID", sql.Int, packageID);
 
-  try {
-    const result = await request.query(query);
-    return result.rowsAffected[0] > 0;
-  } catch (err) {
-    console.error(`DB update error for chapelID ${chapelID}:`, err);
-    throw err;
-  }
+  const result = await request.query(query);
+  return result.rowsAffected[0] > 0;
 };
 
 // ----------------------DELETE-------------------------

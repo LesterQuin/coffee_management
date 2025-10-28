@@ -3,6 +3,7 @@ import { poolPromise } from "../config/db_config.js";
 import * as Model from "../models/chapel_info_model.js";
 import { success, error } from "../utils/response_helper.js";
 
+
 // ----------------------GET-------------------------
 // Get all chapels
 export const getAllChapels = async (req, res) => {
@@ -26,15 +27,26 @@ export const listAvailable = async (req, res) => {
 
 // get id package by chapel
 export const listPackagesByChapel = async (req, res) => {
-  const chapelID = parseInt(req.params.chapelID);
-  try{
-    const packages = await PackageModel.getPackageByChapel(chapelID);
-    res.json({ data: packages });
-  } catch (err) {
-    console.log(err);
-    res.status(500).json({ message: "Failed to fetch packages "});
+  const { chapelID } = req.params;
+
+  try {
+    const packages = await Model.listPackagesByChapel(chapelID);
+
+    return res.json({
+      success: true,
+      message: "Packages fetched successfully",
+      data: packages
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch packages",
+      error: error.message
+    });
   }
 };
+
 
 // ----------------------POST-------------------------
 // Create a new chapel room
@@ -55,7 +67,7 @@ export const create = async (req, res) => {
 
 // ----------------------PUT-------------------------
 // update chapel details
-export const updateChapel = async(req, res) => {
+export const updateChapel = async (req, res) => {
   const { chapelID } = req.params;
   const { chapelName, description, packageID, statusId } = req.body;
 

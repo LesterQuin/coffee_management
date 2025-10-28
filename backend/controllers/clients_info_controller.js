@@ -34,9 +34,8 @@ export const getClientById = async (req, res) => {
 
     const raw = await Model.getClientById(clientID);
     if (!raw) return error(res, "Client not found", 404);
-    const client = (raw && Model.mapClientRow) ? Model.mapClientRow(raw) : raw; // optional mapping
+    const client = (raw && Model.mapClientRow) ? Model.mapClientRow(raw) : raw;
 
-    // Include package summary (D3)
     const packageSummary = await Model.getClientPackageSummary(clientID);
     return success(res, { ...client, packageSummary }, "Client fetched successfully");
   } catch (e) {
@@ -49,8 +48,10 @@ export const getClientById = async (req, res) => {
 export const registerClient = async (req, res) => {
   try {
     const userName = req.user?.name || "unknown";
+    // Note: req.body should match the final payload (no packageNo required)
     const result = await Model.registerClientWithQR(req.body, userName);
-    return success(res, result, "Client registered successfully with packages");
+    // Return the 'data' object (friendly response)
+    return success(res, result.data, result.message);
   } catch (e) {
     console.error("❌ Register Error:", e);
     return error(res, e.message);
@@ -65,14 +66,10 @@ export const clientLogin = async (req, res) => {
 
     if (!clientSecret || !pin) return error(res, "Invalid PIN");
 
-    // 1. Get client by QR secret
-    const client = await Clients.getClientBySecret(clientSecret);
+    const client = await Model.getClientBySecret(clientSecret);
     if (!client) return error(res, "Invalid PIN");
-
-    // 2. Must be Active
     if (client.status !== "Active") return error(res, "Invalid PIN");
 
-    // 3. Validate schedule window (B1 + D2)
     const now = new Date();
     const start = new Date(client.schedule_from);
     const end = new Date(client.schedule_to);
@@ -81,13 +78,11 @@ export const clientLogin = async (req, res) => {
       return error(res, "Your session schedule has expired or not yet started");
     }
 
-    // 4. Daily PIN check
-    const todayPin = Clients.generateDailyPin(client.clientID);
+    const todayPin = Model.generateDailyPin(client.clientID);
     if (pin !== todayPin) return error(res, "Invalid PIN");
 
-    // 5. Create session (always allowed inside schedule)
     const expiresAt = new Date(Date.now() + 6 * 60 * 60 * 1000); // 6 hours
-    const sessionId = await Sessions.createSession({
+    const sessionId = await createSession({
       clientID: client.clientID,
       userName: userName || client.deceasedName || `client-${client.clientID}`,
       pin: todayPin,
@@ -95,7 +90,6 @@ export const clientLogin = async (req, res) => {
       expiresAt
     });
 
-    // 6. Respond exactly as you wanted
     return success(res, {
       sessionId,
       clientID: client.clientID,
@@ -106,7 +100,6 @@ export const clientLogin = async (req, res) => {
       packageName: client.packageName,
       expiresAt
     }, "Login success");
-
   } catch (e) {
     console.error("❌ ClientLogin error", e);
     return error(res, e.message || "Server error");
@@ -231,5 +224,36 @@ export const getTodayPinForCashier = async (req, res) => {
   } catch (e) {
     console.error("❌ getTodayPinForCashier Error:", e);
     return error(res, e.message || "Server error");
+  }
+};
+
+export const getClientPackageSummaryController = async (req, res) => {
+  try {
+    const clientID = parseInt(req.params.clientID, 10);
+    if (isNaN(clientID)) return error(res, "Invalid clientID", 400);
+
+    const summary = await Model.getClientPackageSummary(clientID);
+    if (!summary) return error(res, "Client not found", 404);
+
+    return success(res, summary, "Client package summary loaded");
+  } catch (e) {
+    console.error("❌ getClientPackageSummaryController Error:", e);
+    return error(res, e.message || "Server error");
+  }
+};
+
+// Assign default package to client
+export const assignDefaultPackageToClientController = async (req, res) => {
+  const clientID = parseInt(req.params.clientID, 10);
+  if (isNaN(clientID)) return error(res, "Invalid clientID", 400);
+
+  try {
+    const packageID = await Model.assignDefaultPackageToClient(clientID);
+    if (!packageID) return error(res, "No default package found", 404);
+
+    return success(res, { packageID }, "Default package assigned successfully");
+  } catch (e) {
+    console.error("❌ Assign default package error:", e);
+    return error(res, e.message || "Internal server error");
   }
 };
