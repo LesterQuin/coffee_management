@@ -303,6 +303,8 @@ export const addPackageItem = async (packageID, productID) => {
 
   if (!pkgRes.recordset.length) throw new Error("Package not found");
 
+  const packageQty = Number(pkgRes.recordset[0].quantity);
+
   // Check if product already exists in package
   const existingRes = await pool.request()
     .input("packageID", sql.Int, packageID)
@@ -315,7 +317,7 @@ export const addPackageItem = async (packageID, productID) => {
     const insertRes = await pool.request()
       .input("packageID", sql.Int, packageID)
       .input("productID", sql.Int, productID)
-      .input("quantity", sql.Int, 0)  // initial quantity 0
+      .input("quantity", sql.Int, packageQty)  // <-- use package's quantity
       .query(`
         INSERT INTO sg.LQ_CSS_fnb_package_items (packageID, productID, quantity)
         VALUES (@packageID, @productID, @quantity);

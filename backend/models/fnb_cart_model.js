@@ -23,8 +23,8 @@ export const viewAllCarts = async () => {
   const res = await pool.request()
     .query(`
       SELECT c.cartID, c.clientID, ci.deceasedName, ci.registeredBy AS customerName,
-             ci.mobileNo AS customerNumber,
-             i.cartItemID, i.productID, i.quantity, i.sizeId, p.productName, p.price,
+              ci.mobileNo AS customerNumber,
+              i.cartItemID, i.productID, i.quantity, i.sizeId, p.productName, p.price,
              (i.quantity * p.price) AS total
       FROM sg.LQ_CSS_fnb_cart c
       INNER JOIN sg.LQ_CSS_client_info ci ON c.clientID = ci.clientID
@@ -123,17 +123,17 @@ export const checkout = async (clientID, paymentType, staffID) => {
   const { orderID, totalAmount } = res.recordset[0];
 
   const clientRes = await pool.request()
-   .input("clientID", sql.Int, clientID)
-   .query(`
-    SELECT c.deceasedName, 
-           c.registeredBy AS customerName, 
-           c.mobileNo AS customerNumber,
-           cr.chapelName,
-           fp.packageName
-    FROM sg.LQ_CSS_client_info c
-    LEFT JOIN sg.LQ_CSS_chapel_rooms cr ON c.chapelID = cr.chapelID
-    LEFT JOIN sg.LQ_CSS_fnb_packages fp ON c.packageNo = fp.packageID
-    WHERE c.clientID = @clientID
+    .input("clientID", sql.Int, clientID)
+    .query(`
+      SELECT c.deceasedName, 
+            c.registeredBy AS customerName, 
+            c.mobileNo AS customerNumber,
+            cr.chapelName,
+            fp.packageName
+      FROM sg.LQ_CSS_client_info c
+      LEFT JOIN sg.LQ_CSS_chapel_rooms cr ON c.chapelID = cr.chapelID
+      LEFT JOIN sg.LQ_CSS_fnb_packages fp ON c.packageNo = fp.packageID
+      WHERE c.clientID = @clientID
   `);
 
   const client = clientRes.recordset[0];
