@@ -69,8 +69,8 @@ export const clientLogin = async (req, res) => {
     if (!token) return error(res, "Token is required", 400);
     if (!pin) return error(res, "PIN is required", 400);
 
-    // Find client by token (maps to clientSecret in DB)
-    const client = await Clients.getClientBySecret(token);
+    // Find client by tokenQr instead of clientSecret
+    const client = await Clients.getClientByTokenQr(token);
     if (!client) return error(res, "Invalid token", 404);
     if (client.status !== "Active") return error(res, "Client inactive", 400);
 
@@ -91,7 +91,6 @@ export const clientLogin = async (req, res) => {
     });
 
     // Assign default role for client login
-    const roleID = 5; // Client role
     const role = "User";
 
     // Respond with session info
@@ -102,11 +101,10 @@ export const clientLogin = async (req, res) => {
       deceasedName: client.deceasedName,
       chapelID: client.chapelID,
       chapelName: client.chapelName,
-      roleID,
       role,
       packageNo: client.packageNo,
       packageName: client.packageName,
-      token,
+      token, // the tokenQr value used for login
       expiresAt
     }, "Login successful");
 
@@ -115,6 +113,7 @@ export const clientLogin = async (req, res) => {
     return error(res, e.message || "Server error");
   }
 };
+
 // ----------------------PUT-------------------------
 
 // ----------------------DELETE-------------------------

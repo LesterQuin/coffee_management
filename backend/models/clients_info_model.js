@@ -350,6 +350,22 @@ export const getClientBySecret = async (clientSecret) => {
   return res.recordset[0] || null;
 };
 
+export const getClientByTokenQr = async (tokenQr) => {
+  try {
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .input("tokenQr", sql.NVarChar(100), tokenQr)
+      .query(`
+        SELECT *
+        FROM sg.LQ_CSS_client_info
+        WHERE tokenQr = @tokenQr
+      `);
+    return result.recordset[0] || null;
+  } catch (err) {
+    console.error("❌ getClientByTokenQr error:", err);
+    throw err;
+  }
+};
 // ---------------------- AUTH helpers -------------------------
 // get client auth fields needed for login/validation
 export const getClientAuthData = async (clientID) => {
