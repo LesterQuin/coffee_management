@@ -232,7 +232,7 @@ export const getClientPackageSummaryController = async (req, res) => {
     const clientID = parseInt(req.params.clientID, 10);
     if (isNaN(clientID)) return error(res, "Invalid clientID", 400);
 
-    const summary = await Model.getClientPackageSummary(clientID);
+    const summary = await Model.getClientWithPackageSummaryTest(clientID);
     if (!summary) return error(res, "Client not found", 404);
 
     return success(res, summary, "Client package summary loaded");
