@@ -196,6 +196,24 @@ export const getClientByPin = async (pin) => {
   return result.recordset[0] || null;
 };
 
+export const updateClientPin = async (clientID, pin) => {
+  try {
+    const pool = await poolPromise;
+    await pool.request()
+      .input("clientID", sql.Int, clientID)
+      .input("pin", sql.NVarChar(10), pin)
+      .query(`
+        UPDATE sg.LQ_CSS_client_info
+        SET pin = @pin, updatedAt = GETDATE()
+        WHERE clientID = @clientID
+      `);
+    return true;
+  } catch (err) {
+    console.error("❌ updateClientPin error:", err);
+    throw err;
+  }
+};
+
 export const getClientPackageItems = async (clientID) => {
   const pool = await poolPromise;
   const res = await pool.request()

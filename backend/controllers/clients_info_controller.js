@@ -45,13 +45,41 @@ export const getClientById = async (req, res) => {
 };
 
 // Register client (staff)
+// export const registerClient = async (req, res) => {
+//   try {
+//     const userName = req.user?.name || "unknown";
+//     // Note: req.body should match the final payload (no packageNo required)
+//     const result = await Model.registerClientWithQR(req.body, userName);
+//     // Return the 'data' object (friendly response)
+//     return success(res, result.data, result.message);
+//   } catch (e) {
+//     console.error("❌ Register Error:", e);
+//     return error(res, e.message);
+//   }
+// };
+
+// Register client (staff)
 export const registerClient = async (req, res) => {
   try {
     const userName = req.user?.name || "unknown";
-    // Note: req.body should match the final payload (no packageNo required)
+
+    // Register client
     const result = await Model.registerClientWithQR(req.body, userName);
-    // Return the 'data' object (friendly response)
-    return success(res, result.data, result.message);
+
+    // Extract the new client ID from the result
+    const newClientID = result?.data?.client?.clientID;
+    if (!newClientID) return error(res, "Failed to register client ID");
+
+    // ✅ Generate and save today's PIN immediately
+    const todayPin = Model.generateDailyPin(newClientID);
+    await Model.updateClientPin(newClientID, todayPin); // You’ll need this function in your model
+
+    // Return success with today’s PIN for immediate login
+    return success(
+      res,
+      { ...result.data, todayPin },
+      "Client registered successfully. PIN generated for today."
+    );
   } catch (e) {
     console.error("❌ Register Error:", e);
     return error(res, e.message);

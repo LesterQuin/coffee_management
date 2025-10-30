@@ -29,6 +29,6 @@ router.get("/:clientID/dashboard", staffAuth, Controller.getClientDashboard);
 // add after dashboard route
 router.get("/:clientID/pin/today", staffAuth, Controller.getTodayPinForCashier);
 // Get client package summary
-router.get("/:clientID/package/summary", staffAuth, Controller.getClientPackageSummaryController);
+router.get("/:clientID/package/summary", Controller.getClientPackageSummaryController);
 
 export default router;
