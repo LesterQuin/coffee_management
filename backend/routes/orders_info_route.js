@@ -6,19 +6,21 @@ const router = express.Router();
 
 // ----------------------GET-------------------------
 // Get all orders for a client
-router.get("/client/:clientID", staffAuth, Controller.getOrders);
+router.get("/client/:clientID", Controller.getOrders);
 
 // ----------------------POST-------------------------
 // Order routes
-router.post("/place", staffAuth, Controller.placeOrder);
+router.post("/place", Controller.placeOrder);
 
 // ----------------------PUT-------------------------
 // Update order status
-router.put("/status/:orderID", staffAuth, Controller.updateOrderStatus);
+router.put("/status/:orderID", Controller.updateOrderStatus);
 // Update order status
-router.put("/status", staffAuth, Controller.updateStatus);
+router.put("/status", Controller.updateStatus);
 
 // ----------------------DELETE-------------------------
+// Cancel order (only if pending)
+router.delete("/cancel/:orderID", staffAuth, Controller.cancelOrder);
 
 
 export default router;

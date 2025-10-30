@@ -9,21 +9,23 @@ const router = express.Router();
 // view all carts
 router.get("/", staffAuth, Cart.viewAllCarts);
 // view cart items for a client
-router.get("/view/:clientID",staffAuth, Cart.viewCart);
+router.get("/view/:clientID", Cart.viewCart);
+// view cart items for a sessionID
+router.get("/view/session/:sessionID", Cart.viewCartSession);
 
 // ----------------------POST-------------------------
 // add Cart item
-router.post("/add",staffAuth,  Cart.addItem);
+router.post("/add", Cart.addItems);
 // checkout cart
-router.post("/checkout",staffAuth, Cart.checkout);
+router.post("/checkout", Cart.checkout);
 
 // ----------------------PUT-------------------------
 // Update item quantity or details in cart
-router.put("/update", staffAuth, Cart.updateItem);
+router.put("/update", Cart.updateItem);
 
 // ----------------------DELETE-------------------------
 // remove item from cart
-router.delete("/remove",staffAuth, Cart.removeItem);
+router.delete("/remove", Cart.removeItem);
 
 
 export default router;
