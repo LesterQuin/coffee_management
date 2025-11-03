@@ -49,6 +49,7 @@ export const viewAllCarts = async (req, res) => {
         acc[item.cartID] = {
           cartID: item.cartID,
           clientID: item.clientID,
+          sessionID: item.sessionID,      // added sessionID
           deceasedName: item.deceasedName,
           customerName: item.customerName,
           customerNumber: item.customerNumber,
@@ -86,18 +87,21 @@ export const viewAllCarts = async (req, res) => {
   } catch (e) {
     return error(res, e.message, 500);
   }
-}
+};
 
 // View cart
 export const viewCart = async (req, res) => {
   try {
-    const { clientID } = req.params;
+    const { clientID, sessionID } = req.params;
 
-    if (!clientID) {
-      return error(res, "Missing required parameter: clientID", 400);
+    if (!clientID && !sessionID) {
+      return error(res, "Missing required parameter: clientID or sessionID", 400);
     }
 
-    const cart = await Model.viewCart(clientID);
+    // Fetch cart based on sessionID if provided, otherwise by clientID
+    const cart = sessionID 
+      ? await Model.viewCartBySession(parseInt(sessionID, 10)) 
+      : await Model.viewCart(parseInt(clientID, 10));
 
     if (!cart || cart.length === 0) {
       return success(res, { items: [], totalAmount: 0 }, "Cart is empty");
@@ -131,27 +135,36 @@ export const viewCart = async (req, res) => {
 
 export const viewCartSession = async (req, res) => {
   try {
-    const { clientID, sessionID } = req.params;
+    const sessionID = parseInt(req.params.sessionID, 10);
+    if (isNaN(sessionID)) return error(res, "Invalid sessionID", 400);
 
-    if (!clientID && !sessionID) {
-      return error(res, "Missing required parameter: clientID or sessionID", 400);
+    const cart = await Model.viewCartBySession(sessionID);
+
+    if (!cart || cart.length === 0) {
+      return success(res, { items: [], totalAmount: 0 }, "Cart is empty");
     }
 
-    const cart = await Model.viewCart(clientID, sessionID);
-
+    // Group items by productID + sizeId
     const grouped = cart.reduce((acc, item) => {
-      const key = `${item.productID}`;
+      const key = `${item.productID}_${item.sizeId}`;
       if (!acc[key]) {
         acc[key] = {
           productID: item.productID,
-          description: item.productName,
+          categoryID: item.categoryId,
+          categoryName: item.categoryName,  // if you join category table
+          productName: item.productName,
+          size: item.size,
+          sizeId: item.sizeId,
           qty: 0,
           amount: item.price,
           total: 0
         };
       }
-      acc[key].qty += item.quantity;
-      acc[key].total += item.total || 0;
+
+      acc[key].qty += item.qty;
+      acc[key].amount = item.price;  // price per item
+      acc[key].total += item.total || item.price * item.qty;
+
       return acc;
     }, {});
 
@@ -182,41 +195,47 @@ export const viewCartSession = async (req, res) => {
 
 export const addItems = async (req, res) => {
   try {
-    const { clientID, items, productID, quantity } = req.body;
+    const { clientID, sessionID, items, productID, quantity, sizeId } = req.body;
 
-    if (!clientID) {
-      return error(res, "Missing required field: clientID", 400);
+    if (!clientID && !sessionID) {
+      return error(res, "Missing required field: clientID or sessionID", 400);
     }
 
-    // Normalize input: single item to array items
+    // Normalize input
     let itemsArray = [];
-    if (Array.isArray(items) && items.length > 0){
-      itemsArray = items;
-    } else if (productID && quantity){
-      itemsArray = [{ productID, quantity }];
+    if (Array.isArray(items) && items.length > 0) {
+      itemsArray = items.map(i => ({ productID: i.productID, quantity: i.quantity, sizeId: i.sizeId || null }));
+    } else if (productID && quantity) {
+      itemsArray = [{ productID, quantity, sizeId: sizeId || null }];
     } else {
       return error(res, "Invalid item format", 400);
     }
 
-    // Add the items to cart
-    await Model.addItems(clientID, itemsArray);
-    // Retrieve added items
-    const cartItems = await Model.viewCart(clientID);
-    // Filter only
+    // Add items to cart
+    await Model.addItems(clientID, itemsArray, sessionID);
+
+    // Fetch updated cart
+    const cartItems = sessionID
+      ? await Model.viewCartBySession(sessionID)
+      : await Model.viewCart(clientID);
+
+    // Filter only added items
     const addedProducts = cartItems
-      .filter(item => itemsArray.some(i => i.productID === item.productID))
+      .filter(item => itemsArray.some(i => i.productID === item.productID && i.sizeId === item.sizeId))
       .map(c => ({
         productID: c.productID,
         description: c.productName,
+        size: c.size || 'N/A',
         qty: c.quantity,
         amount: c.price,
         total: c.total
       }));
+
     return success(res, addedProducts, "Items added to cart successfully");
   } catch (e) {
     return error(res, e.message, 500);
   }
-}
+};
 
 // Checkout cart
 // export const checkout = async (req, res) => {
