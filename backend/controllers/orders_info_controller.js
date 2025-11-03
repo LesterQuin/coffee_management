@@ -14,6 +14,15 @@ export const getOrders = async (req, res) => {
   }
 };
 
+export const getOrdersBySession = async (req, res) => {
+  try {
+    const { sessionID } = req.params;
+    const data = await Model.getOrdersBySession(sessionID);
+    return success(res, data, "Orders fetched successfully for this session");
+  } catch (e) {
+    return error(res, e.message, 500);
+  }
+};
 
 // ----------------------POST-------------------------
 // Place a new order

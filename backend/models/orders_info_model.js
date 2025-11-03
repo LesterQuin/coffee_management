@@ -108,6 +108,53 @@ export const viewCart = async (clientID, sessionID = null) => {
   return res.recordset;
 };
 
+export const getOrdersBySession = async (sessionID) => {
+  try {
+    const pool = await poolPromise;
+    const res = await pool.request()
+      .input("sessionID", sql.Int, sessionID)
+      .query(`
+        SELECT o.orderID, o.status, o.createdAt, o.updatedAt,
+              i.productID, i.quantity, i.sizeId, p.productName, p.price
+        FROM sg.LQ_CSS_fnb_orders o
+        INNER JOIN sg.LQ_CSS_fnb_order_items i ON o.orderID = i.orderID
+        INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
+        WHERE o.sessionID = @sessionID
+        ORDER BY o.createdAt DESC
+      `);
+
+    const rows = res.recordset || [];
+    const nestedOrders = [];
+    const map = {};
+
+    for (const row of rows) {
+      if (!map[row.orderID]) {
+        map[row.orderID] = {
+          orderID: row.orderID,
+          status: row.status,
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+          items: []
+        };
+        nestedOrders.push(map[row.orderID]);
+      }
+      map[row.orderID].items.push({
+        productID: row.productID,
+        productName: row.productName,
+        quantity: row.quantity,
+        sizeId: row.sizeId,
+        price: row.price,
+        total: row.quantity * row.price
+      });
+    }
+
+    return nestedOrders;
+  } catch (err) {
+    throw new Error(`Failed to fetch orders for session ${sessionID}: ${err.message}`);
+  }
+};
+
+
 // ----------------------POST-------------------------
 // Place an order (optional, you can skip if using cart checkout)
 export const placeOrder = async (clientID) => {

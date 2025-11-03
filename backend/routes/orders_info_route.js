@@ -7,6 +7,8 @@ const router = express.Router();
 // ----------------------GET-------------------------
 // Get all orders for a client
 router.get("/client/:clientID", Controller.getOrders);
+// Get all orders for a session
+router.get("/session/:sessionID", Controller.getOrdersBySession);
 
 // ----------------------POST-------------------------
 // Order routes
