@@ -304,14 +304,14 @@ export const checkout = async (req, res) => {
 // Update item quantity or size
 export const updateItem = async (req, res) => {
   try {
-    const { clientID, productID, quantity, sizeId } = req.body;
+    const { clientID, sessionID, productID, quantity, sizeId } = req.body;
 
-    if (!clientID || !productID || !quantity || !sizeId) {
-      return error(res, "Missing required fields: clientID, productID, quantity, sizeId", 400);
+    if ((!clientID && !sessionID) || !productID || !quantity) {
+      return error(res, "Missing required fields: clientID or sessionID, productID, quantity", 400);
     }
-    
-    const result = await Model.updateItem(clientID, productID, quantity, sizeId);
-    return success(res, null, "Cart item updated successfully");
+
+    const result = await Model.updateItem(clientID, sessionID, productID, quantity, sizeId);
+    return success(res, null, result.message);
   } catch (e) {
     return error(res, e.message, 500);
   }
@@ -321,16 +321,17 @@ export const updateItem = async (req, res) => {
 // Remove item from cart
 export const removeItem = async (req, res) => {
   try {
-    const { clientID, productID } = req.body;
+    const { clientID, sessionID, productID } = req.body;
 
-    if (!clientID || !productID) {
-      return error(res, "Missing required fields: clientID, productID", 400);
+    if ((!clientID && !sessionID) || !productID) {
+      return error(res, "Missing required fields: clientID or sessionID, productID", 400);
     }
 
-    await Model.removeItem(clientID, productID);
+    // Call model with clientID or sessionID
+    await Model.removeItem(clientID, productID, sessionID);
+
     return success(res, null, "Item removed from cart");
   } catch (e) {
     return error(res, e.message, 500);
   }
 };
-

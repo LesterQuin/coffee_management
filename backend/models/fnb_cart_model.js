@@ -383,19 +383,27 @@ export const checkout = async (clientID, paymentType, staffID) => {
 
 // ----------------------PUT-------------------------
 // Update item quantity in cart
-export const updateItem = async (clientID, productID, quantity, sizeId) => {
+export const updateItem = async (clientID, sessionID, productID, quantity, sizeId = null) => {
   const pool = await poolPromise;
-  
-  try {
-    const resCart = await pool.request()
-      .input("clientID", sql.Int, clientID)
-      .query("SELECT cartID FROM sg.LQ_CSS_fnb_cart WHERE clientID = @clientID");
 
-    const cartID = resCart.recordset[0]?.cartID;
-    if (!cartID){
-      throw new Error("Cart not found for this client");      
+  try {
+    let resCart;
+    if (sessionID) {
+      resCart = await pool.request()
+        .input("sessionID", sql.Int, sessionID)
+        .query("SELECT cartID FROM sg.LQ_CSS_fnb_cart WHERE sessionID = @sessionID");
+    } else if (clientID) {
+      resCart = await pool.request()
+        .input("clientID", sql.Int, clientID)
+        .query("SELECT cartID FROM sg.LQ_CSS_fnb_cart WHERE clientID = @clientID");
+    } else {
+      throw new Error("clientID or sessionID is required");
     }
 
+    const cartID = resCart.recordset[0]?.cartID;
+    if (!cartID) throw new Error("Cart not found");
+
+    // Check if the item exists
     const resItem = await pool.request()
       .input("cartID", sql.Int, cartID)
       .input("productID", sql.Int, productID)
@@ -403,41 +411,50 @@ export const updateItem = async (clientID, productID, quantity, sizeId) => {
       .query(`
         SELECT cartItemID
         FROM sg.LQ_CSS_fnb_cart_items
-        WHERE cartID = @cartID and productID = @productID AND sizeId = @sizeId
-        `);
+        WHERE cartID = @cartID AND productID = @productID
+          ${sizeId !== null ? "AND sizeId = @sizeId" : "AND sizeId IS NULL"}
+      `);
 
-      if (resItem.recordset.length === 0) {
-        throw new Error("Item not found in cart");
-      }
+    if (resItem.recordset.length === 0) throw new Error("Item not found in cart");
 
-      await pool.request()
-        .input("cartID", sql.Int, cartID)
-        .input("productID", sql.Int, productID)
-        .input("quantity", sql.Int, quantity)
-        .input("sizeId", sql.Int, sizeId)
-        .query(`
-          UPDATE sg.LQ_CSS_fnb_cart_items
-          SET quantity = @quantity
-          WHERE cartID = @cartID AND productID = @productID AND sizeId = @sizeId
-          `);
+    // Update quantity
+    await pool.request()
+      .input("cartID", sql.Int, cartID)
+      .input("productID", sql.Int, productID)
+      .input("quantity", sql.Int, quantity)
+      .input("sizeId", sql.Int, sizeId)
+      .query(`
+        UPDATE sg.LQ_CSS_fnb_cart_items
+        SET quantity = @quantity
+        WHERE cartID = @cartID AND productID = @productID
+          ${sizeId !== null ? "AND sizeId = @sizeId" : "AND sizeId IS NULL"}
+      `);
 
-      return { message: "Cart item updated successfully" };
+    return { message: "Cart item updated successfully" };
   } catch (error) {
     throw new Error(error.message);
   }
 };
 
+
 // ----------------------DELETE-------------------------
 // Remove item from cart
-export const removeItem = async (clientID, productID) => {
+export const removeItem = async (clientID, productID, sessionID) => {
   const pool = await poolPromise;
-  await pool.request()
-    .input("clientID", sql.Int, clientID)
-    .input("productID", sql.Int, productID)
-    .query(`
-      DELETE FROM sg.LQ_CSS_fnb_cart_items
-      WHERE cartID = (SELECT cartID FROM sg.LQ_CSS_fnb_cart WHERE clientID = @clientID)
-        AND productID = @productID
-    `);
+
+  let query = `
+    DELETE FROM sg.LQ_CSS_fnb_cart_items
+    WHERE productID = @productID AND cartID = (
+      SELECT cartID FROM sg.LQ_CSS_fnb_cart WHERE ${sessionID ? "sessionID = @sessionID" : "clientID = @clientID"}
+    )
+  `;
+
+  const request = pool.request()
+    .input("productID", sql.Int, productID);
+
+  if (sessionID) request.input("sessionID", sql.Int, sessionID);
+  else request.input("clientID", sql.Int, clientID);
+
+  await request.query(query);
   return true;
 };
