@@ -41,20 +41,25 @@ import { poolPromise, sql } from "../config/db_config.js";
 
 //   return nestedOrders;
 // };
-export const getClientOrders = async (clientID) => {
+export const getClientOrders = async (clientID, sessionID = null) => {
   try {
     const pool = await poolPromise;
-    const res = await pool.request()
-      .input("clientID", sql.Int, clientID)
-      .query(`
-        SELECT o.orderID, o.status, o.createdAt, o.updatedAt,
-              i.productID, i.quantity, i.sizeId, p.productName, p.price
-        FROM sg.LQ_CSS_fnb_orders o
-        INNER JOIN sg.LQ_CSS_fnb_order_items i ON o.orderID = i.orderID
-        INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
-        WHERE o.clientID = @clientID
-        ORDER BY o.createdAt DESC
-      `);
+    const request = pool.request();
+
+    if (clientID) request.input("clientID", sql.Int, clientID);
+    if (sessionID) request.input("sessionID", sql.Int, sessionID);
+
+    const res = await request.query(`
+      SELECT o.orderID, o.status, o.createdAt, o.updatedAt, o.sessionID,
+            i.productID, i.quantity, i.sizeId, p.productName, p.price
+      FROM sg.LQ_CSS_fnb_orders o
+      INNER JOIN sg.LQ_CSS_fnb_order_items i ON o.orderID = i.orderID
+      INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
+      WHERE 
+        (${clientID ? "o.clientID = @clientID" : "1=1"})
+        AND (${sessionID ? "o.sessionID = @sessionID" : "1=1"})
+      ORDER BY o.createdAt DESC
+    `);
 
     const rows = res.recordset || [];
     const nestedOrders = [];
@@ -67,23 +72,27 @@ export const getClientOrders = async (clientID) => {
           status: row.status,
           createdAt: row.createdAt,
           updatedAt: row.updatedAt,
-          items: []
+          sessionID: row.sessionID,
+          items: [],
         };
         nestedOrders.push(map[row.orderID]);
       }
+
       map[row.orderID].items.push({
         productID: row.productID,
         productName: row.productName,
         quantity: row.quantity,
         sizeId: row.sizeId,
         price: row.price,
-        total: row.quantity * row.price
+        total: row.quantity * row.price,
       });
     }
 
     return nestedOrders;
   } catch (err) {
-    throw new Error(`Failed to fetch orders for client ${clientID}: ${err.message}`);
+    throw new Error(
+      `Failed to fetch orders for client ${clientID || "(session only)"}: ${err.message}`
+    );
   }
 };
 
@@ -157,11 +166,18 @@ export const getOrdersBySession = async (sessionID) => {
 
 // ----------------------POST-------------------------
 // Place an order (optional, you can skip if using cart checkout)
-export const placeOrder = async (clientID) => {
+export const placeOrder = async (clientID = null, sessionID = null) => {
   const pool = await poolPromise;
-  const res = await pool.request()
-    .input("clientID", sql.Int, clientID)
-    .execute("sg.LQ_CSS_fnb_place_order");
+  const request = pool.request();
+  if (clientID) request.input("clientID", sql.Int, clientID);
+  if (sessionID) request.input("sessionID", sql.Int, sessionID);
+
+  const res = await request.query(`
+    INSERT INTO sg.LQ_CSS_fnb_orders (clientID, sessionID, status, createdAt, updatedAt)
+    VALUES (@clientID, @sessionID, 'Pending', GETDATE(), GETDATE());
+    SELECT SCOPE_IDENTITY() AS orderID;
+  `);
+
   return res.recordset?.[0] || { orderID: null };
 };
 

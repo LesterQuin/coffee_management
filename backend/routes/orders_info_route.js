@@ -9,6 +9,9 @@ const router = express.Router();
 router.get("/client/:clientID", Controller.getOrders);
 // Get all orders for a session
 router.get("/session/:sessionID", Controller.getOrdersBySession);
+// Optional: unified endpoint for flexibility (clientID or sessionID via query)
+// Example: GET /api/orders?clientID=12 or /api/orders?sessionID=30
+router.get("/", Controller.getOrders);
 
 // ----------------------POST-------------------------
 // Order routes

@@ -7,8 +7,16 @@ import { success, error } from "../utils/response_helper.js";
 export const getOrders = async (req, res) => {
   try {
     const { clientID } = req.params;
-    const orders = await Model.getClientOrders(clientID);
-    return success(res, orders, "Client orders retrieved successfully");
+    const { sessionID } = req.query; // Allow sessionID via query param for flexibility
+
+    if (!clientID && !sessionID) {
+      return error(res, "Either clientID or sessionID is required", 400);
+    }
+
+    const orders = await Model.getClientOrders(clientID || null, sessionID || null);
+    const source = clientID ? "client" : "session";
+
+    return success(res, orders, `Orders retrieved successfully for ${source}`);
   } catch (e) {
     return error(res, e.message, 500);
   }
@@ -17,6 +25,8 @@ export const getOrders = async (req, res) => {
 export const getOrdersBySession = async (req, res) => {
   try {
     const { sessionID } = req.params;
+    if (!sessionID) return error(res, "Missing required field: sessionID", 400);
+
     const data = await Model.getOrdersBySession(sessionID);
     return success(res, data, "Orders fetched successfully for this session");
   } catch (e) {
@@ -28,10 +38,13 @@ export const getOrdersBySession = async (req, res) => {
 // Place a new order
 export const placeOrder = async (req, res) => {
   try {
-    const { clientID } = req.body;
-    if (!clientID) return error(res, "Missing required field: clientID", 400);
+    const { clientID, sessionID } = req.body;
 
-    const result = await Model.placeOrder(clientID);
+    if (!clientID && !sessionID) {
+      return error(res, "Either clientID or sessionID is required to place an order", 400);
+    }
+
+    const result = await Model.placeOrder(clientID || null, sessionID || null);
     return success(res, result, "Order created successfully");
   } catch (e) {
     return error(res, e.message, 500);
@@ -53,35 +66,21 @@ export const placeOrder = async (req, res) => {
 //     return error(res, e.message, 500);
 //   }
 // };
-export const updateOrderStatus = async (orderID, newStatus) => {
-  const pool = await poolPromise;
+export const updateOrderStatus = async (req, res) => {
+  try {
+    const { orderID } = req.params;
+    const { status } = req.body;
 
-  // Get current status
-  const current = await pool.request()
-    .input("orderID", sql.Int, orderID)
-    .query(`SELECT status FROM sg.LQ_CSS_fnb_orders WHERE orderID = @orderID`);
+    if (!orderID || !status) return error(res, "Missing orderID or status", 400);
 
-  if (current.recordset.length === 0) {
-    throw new Error("Order not found");
+    const updated = await Model.updateOrderStatus(orderID, status);
+    if (!updated) return error(res, "Order not found or failed to update", 404);
+
+    return success(res, updated, `Order ${orderID} status updated to ${status}`);
+  } catch (e) {
+    return error(res, e.message, 500);
   }
-
-  const currentStatus = current.recordset[0].status;
-
-  // Restrict cancellation rules
-  if (currentStatus === "Preparing" && newStatus === "Cancelled") {
-    throw new Error("Cannot cancel order once it is Preparing");
-  }
-
-  await pool.request()
-    .input("orderID", sql.Int, orderID)
-    .input("status", sql.NVarChar, newStatus)
-    .query(`
-      UPDATE sg.LQ_CSS_fnb_orders
-      SET status = @status, updatedAt = GETDATE()
-      WHERE orderID = @orderID
-    `);
 };
-
 
 // Update order status
 export const updateStatus = async (req, res) => {
