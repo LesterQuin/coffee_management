@@ -123,13 +123,29 @@ export const getOrdersBySession = async (sessionID) => {
     const res = await pool.request()
       .input("sessionID", sql.Int, sessionID)
       .query(`
-        SELECT o.orderID, o.status, o.createdAt, o.updatedAt,
-              i.productID, i.quantity, i.sizeId, p.productName, p.price
+        SELECT 
+          o.orderID, 
+          o.status, 
+          o.createdAt, 
+          o.updatedAt,
+          i.productID, 
+          i.quantity, 
+          producSize.size,  
+          cat.categoryName,  
+          p.productName, 
+          p.price,
+          c.deceasedName,
+          cr.chapelName
         FROM sg.LQ_CSS_fnb_orders o
         INNER JOIN sg.LQ_CSS_fnb_order_items i ON o.orderID = i.orderID
         INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
+        LEFT JOIN sg.LQ_CSS_fnb_categories cat ON p.categoryID = cat.categoryID
+        LEFT JOIN sg.LQ_CSS_product_sizes AS producSize ON p.sizeId = producSize.sizeId
+        LEFT JOIN sg.LQ_CSS_sessions_info s ON o.sessionID = s.sessionID
+        LEFT JOIN sg.LQ_CSS_client_info c ON s.clientID = c.clientID
+        LEFT JOIN sg.LQ_CSS_chapel_rooms cr ON c.chapelID = cr.chapelID
         WHERE o.sessionID = @sessionID
-        ORDER BY o.createdAt DESC
+        ORDER BY o.createdAt DESC;
       `);
 
     const rows = res.recordset || [];
@@ -143,17 +159,21 @@ export const getOrdersBySession = async (sessionID) => {
           status: row.status,
           createdAt: row.createdAt,
           updatedAt: row.updatedAt,
+          deceasedName: row.deceasedName || null,
+          chapelName: row.chapelName || null,
           items: []
         };
         nestedOrders.push(map[row.orderID]);
       }
+
       map[row.orderID].items.push({
         productID: row.productID,
+        categoryName: row.categoryName || null,
         productName: row.productName,
-        quantity: row.quantity,
-        sizeId: row.sizeId,
-        price: row.price,
-        total: row.quantity * row.price
+        quantity: row.quantity || 0,
+        size: row.size || null,
+        price: row.price || 0,
+        total: (row.quantity || 0) * (row.price || 0)
       });
     }
 
@@ -162,7 +182,6 @@ export const getOrdersBySession = async (sessionID) => {
     throw new Error(`Failed to fetch orders for session ${sessionID}: ${err.message}`);
   }
 };
-
 
 // ----------------------POST-------------------------
 // Place an order (optional, you can skip if using cart checkout)
