@@ -34,6 +34,22 @@ export const getOrdersBySession = async (req, res) => {
   }
 };
 
+export const getAllOrders = async (req, res) => {
+  try {
+    const orders = await Model.getAllOrders(); // Make a model function
+    return res.json({
+      success: true,
+      message: "All orders fetched successfully",
+      data: orders
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
+};
+
 // ----------------------POST-------------------------
 // Place a new order
 export const placeOrder = async (req, res) => {

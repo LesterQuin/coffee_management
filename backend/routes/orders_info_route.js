@@ -12,6 +12,8 @@ router.get("/session/:sessionID", Controller.getOrdersBySession);
 // Optional: unified endpoint for flexibility (clientID or sessionID via query)
 // Example: GET /api/orders?clientID=12 or /api/orders?sessionID=30
 router.get("/", Controller.getOrders);
+//get all order 
+router.get("/all", Controller.getAllOrders);
 
 // ----------------------POST-------------------------
 // Order routes

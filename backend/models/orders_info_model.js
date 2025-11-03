@@ -183,6 +183,65 @@ export const getOrdersBySession = async (sessionID) => {
   }
 };
 
+export const getAllOrders = async () => {
+  const pool = await poolPromise;
+
+  const res = await pool.request().query(`
+    SELECT 
+      o.orderID,
+      o.status AS orderStatus,
+      o.createdAt,
+      o.clientID,
+      ci.deceasedName,
+      cr.chapelName,
+      i.productID,
+      p.productName,
+      p.categoryID,
+      cat.categoryName,
+      i.quantity AS qty,
+      p.price AS amount,
+      (i.quantity * p.price) AS total,
+      i.sizeId,
+      ps.size
+    FROM sg.LQ_CSS_fnb_orders o
+    INNER JOIN sg.LQ_CSS_fnb_order_items i ON i.orderID = o.orderID
+    INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
+    LEFT JOIN sg.LQ_CSS_fnb_categories cat ON p.categoryID = cat.categoryID
+    LEFT JOIN sg.LQ_CSS_product_sizes ps ON p.sizeId = ps.sizeId
+    LEFT JOIN sg.LQ_CSS_client_info ci ON o.clientID = ci.clientID
+    LEFT JOIN sg.LQ_CSS_chapel_rooms cr ON ci.chapelID = cr.chapelID
+    ORDER BY o.createdAt DESC, o.orderID, i.orderItemID;
+  `);
+
+  // Group items by orderID
+  const ordersMap = {};
+  res.recordset.forEach(item => {
+    if (!ordersMap[item.orderID]) {
+      ordersMap[item.orderID] = {
+        orderID: item.orderID,
+        orderStatus: item.orderStatus,
+        createdAt: item.createdAt,
+        clientID: item.clientID,
+        deceasedName: item.deceasedName,
+        chapelName: item.chapelName,
+        items: []
+      };
+    }
+    ordersMap[item.orderID].items.push({
+      productID: item.productID,
+      categoryID: item.categoryID,
+      categoryName: item.categoryName,
+      productName: item.productName,
+      qty: item.qty,
+      amount: item.amount,
+      size: item.size,
+      total: item.total
+    });
+  });
+
+  return Object.values(ordersMap);
+};
+
 // ----------------------POST-------------------------
 // Place an order (optional, you can skip if using cart checkout)
 export const placeOrder = async (clientID = null, sessionID = null) => {
