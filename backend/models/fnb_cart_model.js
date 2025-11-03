@@ -270,91 +270,90 @@ export const addItems = async (clientID, items, sessionID) => {
 
 //   return receipt; // { orderID, totalAmount }
 // };
-export const checkout = async (clientID, paymentType, staffID) => {
+export const checkout = async (clientID = null, sessionID = null, staffID = null) => {
   const pool = await poolPromise;
   const transaction = new sql.Transaction(pool);
 
   try {
     await transaction.begin();
 
-    // 1️⃣ Get the total quantity of items in the client's cart
+    // Resolve clientID via sessionID if needed
+    if (!clientID && sessionID) {
+      const clientRes = await transaction.request()
+        .input("sessionID", sql.Int, sessionID)
+        .query(`
+          SELECT clientID
+          FROM sg.LQ_CSS_sessions_info
+          WHERE sessionID = @sessionID
+        `);
+      clientID = clientRes.recordset[0]?.clientID || null;
+    }
+
+    if (!clientID && !sessionID) throw new Error("Cannot resolve clientID or sessionID");
+
+    // Check cart items
     const cartRes = await transaction.request()
       .input("clientID", sql.Int, clientID)
+      .input("sessionID", sql.Int, sessionID)
       .query(`
-        SELECT SUM(i.quantity) AS totalCartQty
+        SELECT i.cartItemID, i.productID, i.quantity, i.sizeId
         FROM sg.LQ_CSS_fnb_cart_items i
         INNER JOIN sg.LQ_CSS_fnb_cart c ON i.cartID = c.cartID
-        WHERE c.clientID = @clientID
+        WHERE c.clientID = @clientID OR c.sessionID = @sessionID
       `);
 
-    const totalCartQty = cartRes.recordset[0]?.totalCartQty || 0;
-    if (totalCartQty <= 0) {
-      throw new Error("Cart is empty or invalid");
-    }
+    const cartItems = cartRes.recordset;
+    if (!cartItems || cartItems.length === 0) throw new Error("Cart is empty");
 
-    // 2️⃣ Get the client's remaining package quantity
-    const pkgRes = await transaction.request()
+    // Create new order
+    const orderInsert = await transaction.request()
       .input("clientID", sql.Int, clientID)
+      .input("sessionID", sql.Int, sessionID)
+      .input("staffID", sql.Int, staffID)
       .query(`
-        SELECT quantity
-        FROM sg.LQ_CSS_client_packages
-        WHERE clientId = @clientID
+        INSERT INTO sg.LQ_CSS_fnb_orders (clientID, status, createdAt, updatedAt, staffID, sessionID)
+        OUTPUT INSERTED.orderID
+        VALUES (@clientID, 'Pending', GETDATE(), GETDATE(), @staffID, @sessionID)
       `);
 
-    const remainingQty = pkgRes.recordset[0]?.quantity;
-    if (remainingQty == null) {
-      throw new Error("Client package not found");
+    const orderID = orderInsert.recordset[0].orderID;
+
+    // Insert order items with sessionID
+    for (const item of cartItems) {
+      await transaction.request()
+        .input("orderID", sql.Int, orderID)
+        .input("productID", sql.Int, item.productID)
+        .input("quantity", sql.Int, item.quantity)
+        .input("sizeId", sql.Int, item.sizeId || null)
+        .input("sessionID", sql.Int, sessionID)
+        .query(`
+          INSERT INTO sg.LQ_CSS_fnb_order_items (orderID, productID, quantity, sizeId, sessionID)
+          VALUES (@orderID, @productID, @quantity, @sizeId, @sessionID)
+        `);
     }
 
-    // 3️⃣ Check if package has enough remaining quantity
-    if (remainingQty < totalCartQty) {
-      throw new Error("Insufficient package balance");
-    }
-
-    // 4️⃣ Deduct totalCartQty from client's package quantity
+    // Clear cart after checkout
     await transaction.request()
       .input("clientID", sql.Int, clientID)
-      .input("deductQty", sql.Int, totalCartQty)
+      .input("sessionID", sql.Int, sessionID)
       .query(`
-        UPDATE sg.LQ_CSS_client_packages
-        SET quantity = quantity - @deductQty
-        WHERE clientId = @clientID
+        DELETE i
+        FROM sg.LQ_CSS_fnb_cart_items i
+        INNER JOIN sg.LQ_CSS_fnb_cart c ON i.cartID = c.cartID
+        WHERE c.clientID = @clientID OR c.sessionID = @sessionID
       `);
 
-    // 5️⃣ Execute the checkout stored procedure (creates order + moves items)
-    const orderRes = await transaction.request()
-      .input("clientID", sql.Int, clientID)
-      .input("paymentType", sql.NVarChar(20), paymentType)
-      .execute("sg.LQ_CSS_fnb_cart_checkout");
-
-    const { orderID, totalAmount } = orderRes.recordset[0];
-
-    // 6️⃣ Commit the transaction
     await transaction.commit();
 
-    // 7️⃣ Fetch receipt info
-    const clientRes = await pool.request()
-      .input("clientID", sql.Int, clientID)
-      .query(`
-        SELECT c.deceasedName, 
-              c.registeredBy AS customerName, 
-              c.mobileNo AS customerNumber,
-              cr.chapelName,
-              fp.packageName
-        FROM sg.LQ_CSS_client_info c
-        LEFT JOIN sg.LQ_CSS_chapel_rooms cr ON c.chapelID = cr.chapelID
-        LEFT JOIN sg.LQ_CSS_fnb_packages fp ON c.packageNo = fp.packageID
-        WHERE c.clientID = @clientID
-    `);
-
-    const client = clientRes.recordset[0];
-
+    // Fetch order items for response
     const itemsRes = await pool.request()
       .input("orderID", sql.Int, orderID)
       .query(`
-        SELECT p.productName AS description, 
-                i.quantity AS qty, 
-                p.price AS amount
+        SELECT p.productID,
+               p.productName AS description,
+               i.quantity AS qty,
+               p.price AS amount,
+               (i.quantity * p.price) AS total
         FROM sg.LQ_CSS_fnb_order_items i
         INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
         WHERE i.orderID = @orderID
@@ -362,19 +361,33 @@ export const checkout = async (clientID, paymentType, staffID) => {
 
     const items = itemsRes.recordset;
 
+    // Fetch session info (chapelName + deceasedName)
+    const sessionRes = await pool.request()
+      .input("sessionID", sql.Int, sessionID)
+      .query(`
+        SELECT 
+        c.deceasedName,
+        cr.chapelName
+      FROM sg.LQ_CSS_sessions_info s
+      LEFT JOIN sg.LQ_CSS_client_info c ON s.clientID = c.clientID
+      LEFT JOIN sg.LQ_CSS_chapel_rooms cr ON c.chapelID = cr.chapelID
+      WHERE s.sessionID = @sessionID
+      `);
+
+    const sessionInfo = sessionRes.recordset?.[0] || {};
+
+    // Build final receipt
+    const totalAmount = items.reduce((sum, i) => sum + i.total, 0);
     return {
       orderID,
-      deceasedName: client.deceasedName,
-      chapel: client.chapelName,
-      package: client.packageName,
-      orderDateTime: new Date().toISOString(),
-      customerName: client.customerName,
-      customerNumber: client.customerNumber,
-      status: "Pending",
+      orderStatus: "Pending",
+      chapelName: sessionInfo.chapelName || null,
+      deceasedName: sessionInfo.deceasedName || null,
       items,
-      total: totalAmount,
+      totalAmount,
       handledByStaffID: staffID
     };
+
   } catch (err) {
     await transaction.rollback();
     throw new Error(err.message);

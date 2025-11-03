@@ -258,35 +258,50 @@ export const addItems = async (req, res) => {
 // };
 export const checkout = async (req, res) => {
   try {
-    const { clientID, paymentType = "Package" } = req.body; // default to "Package"
+    const { clientID = null, sessionID = null } = req.body;
     const staffID = req.user?.staffID || null;
 
-    if (!clientID) {
-      return error(res, "Missing required field: clientID", 400);
+    if (!clientID && !sessionID) {
+      return error(res, "Missing required fields: clientID or sessionID", 400);
     }
 
-    // Perform checkout (handles deduction + order creation)
-    const receipt = await Model.checkout(clientID, paymentType, staffID);
+    // Perform checkout
+    const receipt = await Model.checkout(clientID, sessionID, staffID);
 
-    // 🧾 Group items by productID (no sizeId)
-    const grouped = receipt.items.reduce((acc, item) => {
-      const key = `${item.productID}`;
-      if (!acc[key]) {
-        acc[key] = {
-          productID: item.productID,
-          description: item.description,
-          qty: 0,
-          amount: item.amount,
-          total: 0
-        };
+    // If cart is empty, fetch items from the newly created order
+    let itemsArray = [];
+    let totalAmount = 0;
+
+    if (receipt.items.length === 0 && receipt.orderID) {
+      const orderData = await Model.getOrderReceipt(receipt.orderID);
+      if (orderData && orderData.items.length) {
+        itemsArray = orderData.items.map(i => ({
+          productID: i.productID,
+          description: i.description,
+          qty: i.qty,
+          amount: i.amount,
+          total: i.qty * i.amount
+        }));
+        totalAmount = orderData.total;
       }
-      acc[key].qty += item.qty;
-      acc[key].total += item.amount * item.qty;
-      return acc;
-    }, {});
-
-    const itemsArray = Object.values(grouped);
-    const totalAmount = itemsArray.reduce((sum, i) => sum + i.total, 0);
+    } else {
+      // Group items by productID
+      const grouped = receipt.items.reduce((acc, item) => {
+        const key = `${item.productID}`;
+        if (!acc[key]) {
+          acc[key] = {
+            productID: item.productID,
+            description: item.description,
+            qty: 0,
+            amount: item.amount || 0
+          };
+        }
+        acc[key].qty += item.qty;
+        return acc;
+      }, {});
+      itemsArray = Object.values(grouped);
+      totalAmount = itemsArray.reduce((sum, i) => sum + (i.total || i.qty * i.amount), 0);
+    }
 
     const responseData = {
       ...receipt,
@@ -299,7 +314,6 @@ export const checkout = async (req, res) => {
     return error(res, e.message, 500);
   }
 };
-
 // ----------------------PUT-------------------------
 // Update item quantity or size
 export const updateItem = async (req, res) => {
