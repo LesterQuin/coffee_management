@@ -190,31 +190,31 @@ export const getAllOrders = async () => {
 
   const res = await pool.request().query(`
     SELECT 
-      o.orderID,
-      o.status AS orderStatus,
-      o.createdAt,
-      o.clientID,
-      ci.deceasedName,
-      cr.chapelName,
-      i.productID,
-      p.productName,
-      p.categoryID,
-      cat.categoryName,
-      i.quantity AS qty,
-      p.price AS amount,
-      (i.quantity * p.price) AS total,
-      i.sizeId,
-      ps.size,
-      s.userName
-    FROM sg.LQ_CSS_fnb_orders o
-    INNER JOIN sg.LQ_CSS_fnb_order_items i ON i.orderID = o.orderID
-    INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
-    LEFT JOIN sg.LQ_CSS_fnb_categories cat ON p.categoryID = cat.categoryID
-    LEFT JOIN sg.LQ_CSS_product_sizes ps ON p.sizeId = ps.sizeId
-    LEFT JOIN sg.LQ_CSS_client_info ci ON o.clientID = ci.clientID
-    LEFT JOIN sg.LQ_CSS_chapel_rooms cr ON ci.chapelID = cr.chapelID
-    LEFT JOIN sg.LQ_CSS_sessions_info s ON o.clientID = s.clientID
-    ORDER BY o.createdAt DESC, o.orderID, i.orderItemID;
+    o.orderID,
+    o.status AS orderStatus,
+    o.createdAt,
+    o.clientID,
+    ci.deceasedName,
+    cr.chapelName,
+    i.productID,
+    p.productName,
+    p.categoryID,
+    cat.categoryName,
+    i.quantity AS qty,
+    p.price AS amount,
+    (i.quantity * p.price) AS total,
+    i.sizeId,
+    ps.size,
+    ISNULL(s.userName, 'unknown') AS userName
+FROM sg.LQ_CSS_fnb_orders o
+INNER JOIN sg.LQ_CSS_fnb_order_items i ON i.orderID = o.orderID
+INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
+LEFT JOIN sg.LQ_CSS_fnb_categories cat ON p.categoryID = cat.categoryID
+LEFT JOIN sg.LQ_CSS_product_sizes ps ON p.sizeId = ps.sizeId
+LEFT JOIN sg.LQ_CSS_sessions_info s ON o.sessionID = s.sessionID   -- ✅ FIXED JOIN
+LEFT JOIN sg.LQ_CSS_client_info ci ON s.clientID = ci.clientID     -- ✅ use session link
+LEFT JOIN sg.LQ_CSS_chapel_rooms cr ON ci.chapelID = cr.chapelID
+ORDER BY o.createdAt DESC, o.orderID, i.orderItemID;
   `);
 
   // Group items by orderID
