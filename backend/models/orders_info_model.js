@@ -324,6 +324,23 @@ export const placeOrder = async (clientID = null, sessionID = null) => {
 // Update order status
 export const updateOrderStatus = async (orderID, status) => {
   const pool = await poolPromise;
+
+  // Step 1: Verify that the order has at least one item in category 3–6
+  const check = await pool.request()
+    .input("orderID", sql.Int, orderID)
+    .query(`
+      SELECT COUNT(*) AS count
+      FROM sg.LQ_CSS_fnb_order_items i
+      INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
+      WHERE i.orderID = @orderID
+        AND p.categoryID BETWEEN 3 AND 6
+    `);
+
+  if (check.recordset[0].count === 0) {
+    throw new Error("Order does not contain any products from categories 3–6.");
+  }
+
+  // Step 2: Update the order status if the check passed
   const res = await pool.request()
     .input("orderID", sql.Int, orderID)
     .input("status", sql.NVarChar, status)

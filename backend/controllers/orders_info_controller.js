@@ -53,7 +53,7 @@ export const getAllOrders = async (req, res) => {
 export const getOrderById = async (req, res) => {
   try {
     const { orderID } = req.params;
-    const order = await Model.getOrderByIdModel(orderID);
+    const order = await Model.getOrderByIdModel(orderID); // ✅ fixed reference
 
     if (!order) {
       return error(res, `No order found for ID ${orderID}`, 404);
@@ -65,6 +65,8 @@ export const getOrderById = async (req, res) => {
     return error(res, `Failed to fetch order: ${err.message}`, 500);
   }
 };
+
+
 
 // ----------------------POST-------------------------
 // Place a new order
@@ -98,12 +100,74 @@ export const placeOrder = async (req, res) => {
 //     return error(res, e.message, 500);
 //   }
 // };
+
+///////////
+// export const updateOrderStatus = async (req, res) => {
+//   try {
+//     const { orderID } = req.params;
+//     const { status } = req.body;
+
+//     if (!orderID || !status) return error(res, "Missing orderID or status", 400);
+
+//     const updated = await Model.updateOrderStatus(orderID, status);
+//     if (!updated) return error(res, "Order not found or failed to update", 404);
+
+//     return success(res, updated, `Order ${orderID} status updated to ${status}`);
+//   } catch (e) {
+//     return error(res, e.message, 500);
+//   }
+// };
+
+// export const updateOrderStatus = async (orderID, status) => {
+//   const pool = await poolPromise;
+
+//   // Step 1: Verify that the order has at least one item in category 3–6
+//   const check = await pool.request()
+//     .input("orderID", sql.Int, orderID)
+//     .query(`
+//       SELECT COUNT(*) AS count
+//       FROM sg.LQ_CSS_fnb_order_items i
+//       INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
+//       WHERE i.orderID = @orderID
+//         AND p.categoryID BETWEEN 3 AND 6
+//     `);
+
+//   if (check.recordset[0].count === 0) {
+//     throw new Error("Order does not contain any products from categories 3–6.");
+//   }
+
+//   // Step 2: Update the order status if the check passed
+//   const res = await pool.request()
+//     .input("orderID", sql.Int, orderID)
+//     .input("status", sql.NVarChar, status)
+//     .query(`
+//       UPDATE sg.LQ_CSS_fnb_orders
+//       SET status = @status, updatedAt = GETDATE()
+//       OUTPUT inserted.orderID,
+//               inserted.clientID,
+//               inserted.status,
+//               inserted.createdAt,
+//               inserted.updatedAt,
+//               inserted.sessionID
+//       WHERE orderID = @orderID
+//     `);
+
+//   return res.recordset?.[0];
+// };
+
 export const updateOrderStatus = async (req, res) => {
   try {
     const { orderID } = req.params;
     const { status } = req.body;
 
-    if (!orderID || !status) return error(res, "Missing orderID or status", 400);
+    if (!orderID || !status) 
+      return error(res, "Missing orderID or status", 400);
+
+    // ✅ Allow only specific statuses
+    const allowedStatuses = ["Pending", "Processing", "Completed", "Cancelled"];
+    if (!allowedStatuses.includes(status)) {
+      return error(res, `Invalid status value. Allowed: ${allowedStatuses.join(", ")}`, 400);
+    }
 
     const updated = await Model.updateOrderStatus(orderID, status);
     if (!updated) return error(res, "Order not found or failed to update", 404);
