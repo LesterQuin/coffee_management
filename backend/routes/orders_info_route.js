@@ -24,6 +24,8 @@ router.post("/place", Controller.placeOrder);
 // ----------------------PUT-------------------------
 // Update order status
 router.put("/status/:orderID", Controller.updateOrderStatus);
+// Canceled order by orderID
+router.put("/cancel/session/:orderID", Controller.cancelOrderBySession);
 // Update order status
 router.put("/status", Controller.updateStatus);
 

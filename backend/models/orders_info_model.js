@@ -359,6 +359,113 @@ export const updateOrderStatus = async (orderID, status) => {
   return res.recordset?.[0];
 };
 
+export const cancelOrderBySession = async (orderID) => {
+  const pool = await poolPromise;
+  const transaction = new sql.Transaction(pool);
+
+  try {
+    await transaction.begin();
+
+    // Step 1: Check if order exists and is Pending
+    const check = await transaction.request()
+      .input("orderID", sql.Int, orderID)
+      .query(`
+        SELECT o.orderID, o.clientID, o.status
+        FROM sg.LQ_CSS_fnb_orders o
+        WHERE o.orderID = @orderID
+      `);
+
+    if (check.recordset.length === 0) throw new Error(`Order ${orderID} not found.`);
+
+    const { clientID, status: currentStatus } = check.recordset[0];
+    if (currentStatus !== "Pending") throw new Error(`Order ${orderID} cannot be cancelled — current status is '${currentStatus}'.`);
+
+    // Step 2: Ensure order has at least one product in category 3–6
+    const hasAllowedCategory = await transaction.request()
+      .input("orderID", sql.Int, orderID)
+      .query(`
+        SELECT COUNT(*) AS count
+        FROM sg.LQ_CSS_fnb_order_items i
+        INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
+        WHERE i.orderID = @orderID
+          AND p.categoryID BETWEEN 3 AND 6
+      `);
+
+    if (hasAllowedCategory.recordset[0].count === 0) {
+      throw new Error(`Order ${orderID} cannot be cancelled — it has no items from categories 3–6.`);
+    }
+
+    // Step 3: Restore quantities for each order item
+    const itemsRes = await transaction.request()
+      .input("orderID", sql.Int, orderID)
+      .query(`
+        SELECT productID, quantity
+        FROM sg.LQ_CSS_fnb_order_items
+        WHERE orderID = @orderID
+      `);
+
+    for (const item of itemsRes.recordset) {
+      const { productID, quantity } = item;
+
+      // Restore package items quantity
+      await transaction.request()
+        .input("clientID", sql.Int, clientID)
+        .input("productID", sql.Int, productID)
+        .input("quantity", sql.Int, quantity)
+        .query(`
+          UPDATE sg.LQ_CSS_client_package_items
+          SET quantity = quantity + @quantity
+          WHERE clientID = @clientID AND productID = @productID
+        `);
+
+      // Restore package summary remainingQty
+      await transaction.request()
+        .input("clientID", sql.Int, clientID)
+        .input("productID", sql.Int, productID)
+        .input("quantity", sql.Int, quantity)
+        .query(`
+          UPDATE sg.LQ_CSS_client_packages
+          SET remainingQty = remainingQty + @quantity
+          WHERE clientID = @clientID
+            AND packageID IN (
+              SELECT packageID
+              FROM sg.LQ_CSS_client_package_items
+              WHERE clientID = @clientID AND productID = @productID
+            )
+        `);
+
+      // Optional: log negative consumption
+      await transaction.request()
+        .input("clientID", sql.Int, clientID)
+        .input("productID", sql.Int, productID)
+        .input("quantity", sql.Int, quantity)
+        .query(`
+          INSERT INTO sg.LQ_CSS_client_consumption_log
+          (clientID, productID, quantity, consumedFrom, createdAt)
+          VALUES (@clientID, @productID, -@quantity, 'cancelOrder', GETDATE())
+        `);
+    }
+
+    // Step 4: Cancel the order
+    const res = await transaction.request()
+      .input("orderID", sql.Int, orderID)
+      .query(`
+        UPDATE sg.LQ_CSS_fnb_orders
+        SET status = 'Cancelled',
+            updatedAt = GETDATE()
+        OUTPUT inserted.orderID, inserted.clientID, inserted.sessionID, inserted.status, inserted.updatedAt
+        WHERE orderID = @orderID;
+      `);
+
+    await transaction.commit();
+    return res.recordset?.[0] || null;
+
+  } catch (err) {
+    await transaction.rollback();
+    throw new Error(err.message);
+  }
+};
+
 // ----------------------DELETE-------------------------
 export const cancelOrder = async (orderID) => {
   const pool = await poolPromise;

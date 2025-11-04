@@ -195,6 +195,21 @@ export const updateStatus = async (req, res) => {
   }
 };
 
+export const cancelOrderBySession = async (req, res) => {
+  try {
+    const { orderID } = req.params;
+    if (!orderID) return error(res, "Missing required field: orderID", 400);
+
+    const cancelled = await Model.cancelOrderBySession(orderID);
+
+    if (!cancelled) return error(res, "Order not found or not eligible for cancellation", 404);
+
+    return success(res, cancelled, `Order ${orderID} cancelled successfully`);
+  } catch (e) {
+    return error(res, e.message, 500);
+  }
+};
+
 // ----------------------DELETE-------------------------
 export const cancelOrder = async (req, res) => {
   try {
