@@ -202,7 +202,8 @@ export const getAllOrders = async () => {
       p.price AS amount,
       (i.quantity * p.price) AS total,
       i.sizeId,
-      ps.size
+      ps.size,
+      s.userName
     FROM sg.LQ_CSS_fnb_orders o
     INNER JOIN sg.LQ_CSS_fnb_order_items i ON i.orderID = o.orderID
     INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
@@ -210,6 +211,7 @@ export const getAllOrders = async () => {
     LEFT JOIN sg.LQ_CSS_product_sizes ps ON p.sizeId = ps.sizeId
     LEFT JOIN sg.LQ_CSS_client_info ci ON o.clientID = ci.clientID
     LEFT JOIN sg.LQ_CSS_chapel_rooms cr ON ci.chapelID = cr.chapelID
+    LEFT JOIN sg.LQ_CSS_sessions_info s ON o.clientID = s.clientID
     ORDER BY o.createdAt DESC, o.orderID, i.orderItemID;
   `);
 
@@ -222,6 +224,7 @@ export const getAllOrders = async () => {
         orderStatus: item.orderStatus,
         createdAt: item.createdAt,
         clientID: item.clientID,
+        userName: item.userName,
         deceasedName: item.deceasedName,
         chapelName: item.chapelName,
         items: []
@@ -241,6 +244,7 @@ export const getAllOrders = async () => {
 
   return Object.values(ordersMap);
 };
+
 
 // ----------------------POST-------------------------
 // Place an order (optional, you can skip if using cart checkout)
@@ -269,41 +273,48 @@ export const updateOrderStatus = async (orderID, status) => {
     .query(`
       UPDATE sg.LQ_CSS_fnb_orders
       SET status = @status, updatedAt = GETDATE()
-      OUTPUT inserted.*
+      OUTPUT inserted.orderID,
+              inserted.clientID,
+              inserted.status,
+              inserted.createdAt,
+              inserted.updatedAt,
+              inserted.sessionID
       WHERE orderID = @orderID
     `);
 
   return res.recordset?.[0];
 };
+
 // ----------------------DELETE-------------------------
-export const cancelOrder = async (orderID, staffID = null) => {
+export const cancelOrder = async (orderID) => {
   const pool = await poolPromise;
 
-  // Only cancel if order is still pending
+  // Check current status
   const res = await pool.request()
     .input("orderID", sql.Int, orderID)
-    .query(`
-      SELECT status FROM sg.LQ_CSS_fnb_orders WHERE orderID = @orderID
-    `);
+    .query(`SELECT status FROM sg.LQ_CSS_fnb_orders WHERE orderID = @orderID`);
 
   if (res.recordset.length === 0) throw new Error("Order not found");
-  const status = res.recordset[0].status;
+  const currentStatus = res.recordset[0].status;
 
-  if (status !== "Pending") {
+  if (currentStatus !== "Pending") {
     throw new Error("Only pending orders can be cancelled");
   }
 
-  await pool.request()
+  const updateRes = await pool.request()
     .input("orderID", sql.Int, orderID)
-    .input("staffID", sql.Int, staffID)
     .query(`
       UPDATE sg.LQ_CSS_fnb_orders
-      SET status = 'Cancelled',
-          updatedAt = GETDATE(),
-          cancelledBy = @staffID,
-          cancelledAt = GETDATE()
+      SET status = 'Cancelled', updatedAt = GETDATE()
+      OUTPUT inserted.orderID,
+              inserted.clientID,
+              inserted.status,
+              inserted.createdAt,
+              inserted.updatedAt,
+              inserted.sessionID
       WHERE orderID = @orderID
     `);
 
-  return { orderID, status: "Cancelled" };
+  return updateRes.recordset?.[0];
 };
+
