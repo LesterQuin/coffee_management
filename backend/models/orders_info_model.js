@@ -283,7 +283,7 @@ export const getOrderByIdModel = async (orderID) => {
 
   const order = {
     orderID: rows[0].orderID,
-    status: rows[0].status,
+    orderStatus: rows[0].status,
     createdAt: rows[0].createdAt,
     updatedAt: rows[0].updatedAt,
     userName: rows[0].userName || null,
@@ -293,7 +293,7 @@ export const getOrderByIdModel = async (orderID) => {
       productID: item.productID,
       categoryName: item.categoryName || null,
       productName: item.productName,
-      quantity: item.quantity || 0,
+      qty: item.quantity || 0,
       size: item.size || null,
       price: item.price || 0,
       total: (item.quantity || 0) * (item.price || 0)
