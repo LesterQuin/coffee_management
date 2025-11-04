@@ -50,6 +50,22 @@ export const getAllOrders = async (req, res) => {
   }
 };
 
+export const getOrderById = async (req, res) => {
+  try {
+    const { orderID } = req.params;
+    const order = await Model.getOrderByIdModel(orderID);
+
+    if (!order) {
+      return error(res, `No order found for ID ${orderID}`, 404);
+    }
+
+    return success(res, order, "Order fetched successfully");
+  } catch (err) {
+    console.error("Error in getOrderById controller:", err);
+    return error(res, `Failed to fetch order: ${err.message}`, 500);
+  }
+};
+
 // ----------------------POST-------------------------
 // Place a new order
 export const placeOrder = async (req, res) => {

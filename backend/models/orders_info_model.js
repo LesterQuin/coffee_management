@@ -247,6 +247,61 @@ export const getAllOrders = async () => {
   return Object.values(ordersMap);
 };
 
+export const getOrderByIdModel = async (orderID) => {
+  const pool = await poolPromise;
+
+  const res = await pool.request()
+    .input("orderID", sql.Int, orderID)
+    .query(`
+      SELECT 
+        o.orderID, 
+        o.status, 
+        o.createdAt, 
+        o.updatedAt,
+        i.productID, 
+        i.quantity, 
+        ps.size,  
+        cat.categoryName,  
+        p.productName, 
+        p.price,
+        c.deceasedName,
+        cr.chapelName,
+        s.userName
+      FROM sg.LQ_CSS_fnb_orders o
+      INNER JOIN sg.LQ_CSS_fnb_order_items i ON o.orderID = i.orderID
+      INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
+      LEFT JOIN sg.LQ_CSS_fnb_categories cat ON p.categoryID = cat.categoryID
+      LEFT JOIN sg.LQ_CSS_product_sizes ps ON p.sizeId = ps.sizeId
+      LEFT JOIN sg.LQ_CSS_sessions_info s ON o.sessionID = s.sessionID
+      LEFT JOIN sg.LQ_CSS_client_info c ON s.clientID = c.clientID
+      LEFT JOIN sg.LQ_CSS_chapel_rooms cr ON c.chapelID = cr.chapelID
+      WHERE o.orderID = @orderID;
+    `);
+
+  const rows = res.recordset;
+  if (!rows || rows.length === 0) return null;
+
+  const order = {
+    orderID: rows[0].orderID,
+    status: rows[0].status,
+    createdAt: rows[0].createdAt,
+    updatedAt: rows[0].updatedAt,
+    userName: rows[0].userName || null,
+    deceasedName: rows[0].deceasedName || null,
+    chapelName: rows[0].chapelName || null,
+    items: rows.map(item => ({
+      productID: item.productID,
+      categoryName: item.categoryName || null,
+      productName: item.productName,
+      quantity: item.quantity || 0,
+      size: item.size || null,
+      price: item.price || 0,
+      total: (item.quantity || 0) * (item.price || 0)
+    }))
+  };
+
+  return order;
+};
 
 // ----------------------POST-------------------------
 // Place an order (optional, you can skip if using cart checkout)

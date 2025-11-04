@@ -14,6 +14,8 @@ router.get("/session/:sessionID", Controller.getOrdersBySession);
 router.get("/", Controller.getOrders);
 //get all order 
 router.get("/all", Controller.getAllOrders);
+// get order by orderID
+router.get("/order/:orderID", Controller.getOrderById);
 
 // ----------------------POST-------------------------
 // Order routes
