@@ -135,7 +135,8 @@ export const getOrdersBySession = async (sessionID) => {
           p.productName, 
           p.price,
           c.deceasedName,
-          cr.chapelName
+          cr.chapelName,
+          s.userName
         FROM sg.LQ_CSS_fnb_orders o
         INNER JOIN sg.LQ_CSS_fnb_order_items i ON o.orderID = i.orderID
         INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
@@ -159,6 +160,7 @@ export const getOrdersBySession = async (sessionID) => {
           status: row.status,
           createdAt: row.createdAt,
           updatedAt: row.updatedAt,
+          userName: row.userName || null,
           deceasedName: row.deceasedName || null,
           chapelName: row.chapelName || null,
           items: []
