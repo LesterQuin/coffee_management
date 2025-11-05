@@ -415,7 +415,7 @@ export const isDefaultPackageAllowed = async (clientID, forDate = null) => {
 //   const pin = Math.floor(100000 + Math.random() * 900000).toString();
 //   const clientSecret = generateClientSecret();
 
-//   // Insert client info
+//   // 1️⃣ Insert client info
 //   const insertResult = await pool.request()
 //     .input("deceasedName", sql.NVarChar(150), client.deceasedName)
 //     .input("registeredBy", sql.NVarChar(150), client.registeredBy)
@@ -441,73 +441,58 @@ export const isDefaultPackageAllowed = async (clientID, forDate = null) => {
 //   const clientID = insertResult.recordset?.[0]?.clientID;
 //   if (!clientID) throw new Error("Failed to register client");
 
-//   // 1) Assign system default package
-//   const assignedDefaultPackageID = await assignDefaultPackageToClient(clientID);
+//   // 2️⃣ Collect all package IDs to assign (default + selected + extra)
+//   const packageIDs = new Set();
 
-//   // 2) Determine chapel/selected package
-//   let assignedSelectedPackageID = null;
-//   let selectedPackageIdToAssign = null;
+//   // Assign default package
+//   const defaultPackageID = await assignDefaultPackageToClient(clientID);
+//   if (defaultPackageID) packageIDs.add(defaultPackageID);
 
-//   if (client.packageNo) {
-//     selectedPackageIdToAssign = client.packageNo;
-//   } else if (client.chapelID) {
+//   // Selected/chosen package
+//   let selectedPackageID = null;
+//   if (client.packageNo) selectedPackageID = client.packageNo;
+//   else if (client.chapelID) {
 //     const chapelRes = await pool.request()
 //       .input("chapelID", sql.Int, client.chapelID)
 //       .query(`SELECT packageID FROM sg.LQ_CSS_chapel_rooms WHERE chapelID = @chapelID`);
-//     const chapelPackageID = chapelRes.recordset?.[0]?.packageID || null;
-//     if (chapelPackageID) selectedPackageIdToAssign = chapelPackageID;
+//     selectedPackageID = chapelRes.recordset?.[0]?.packageID || null;
+//   }
+//   if (selectedPackageID && !packageIDs.has(selectedPackageID)) {
+//     await addPackageToClient(clientID, selectedPackageID, 1);
+//     packageIDs.add(selectedPackageID);
 //   }
 
-//   if (selectedPackageIdToAssign) {
-//     assignedSelectedPackageID = selectedPackageIdToAssign;
-//     await addPackageToClient(clientID, selectedPackageIdToAssign, 1);
-//   }
-
-//   // 3) Handle extraPackages[]
+//   // Extra packages
 //   const assignedExtraPackages = [];
-//   if (Array.isArray(client.extraPackages) && client.extraPackages.length > 0) {
-//     for (const extraPkgIdRaw of client.extraPackages) {
-//       const extraPkgId = Number(extraPkgIdRaw);
-//       if (!extraPkgId || isNaN(extraPkgId)) continue;
-//       try {
-//         const addRes = await addPackageToClient(clientID, extraPkgId, 0);
-//         if (addRes && addRes.success) {
-//           assignedExtraPackages.push({ packageID: extraPkgId, success: true });
-//         } else {
-//           assignedExtraPackages.push({ packageID: extraPkgId, success: false, message: addRes?.message || "Failed to add" });
-//         }
-//       } catch (e) {
-//         assignedExtraPackages.push({ packageID: extraPkgId, success: false, message: e.message });
-//       }
+//   if (Array.isArray(client.extraPackages)) {
+//     for (const extraPkgRaw of client.extraPackages) {
+//       const extraPkgID = Number(extraPkgRaw);
+//       if (!extraPkgID || packageIDs.has(extraPkgID)) continue;
+//       const addRes = await addPackageToClient(clientID, extraPkgID, 0);
+//       if (addRes.success) packageIDs.add(extraPkgID);
+//       assignedExtraPackages.push({ packageID: extraPkgID, success: addRes.success, message: addRes.message });
 //     }
 //   }
 
-//   // --- NEW: Insert package-level record in LQ_CSS_client_packages ---
-//   const allAssignedPackageIDs = [];
-//   if (assignedDefaultPackageID) allAssignedPackageIDs.push(assignedDefaultPackageID);
-//   if (assignedSelectedPackageID) allAssignedPackageIDs.push(assignedSelectedPackageID);
-//   assignedExtraPackages.forEach(e => { if (e.success) allAssignedPackageIDs.push(e.packageID); });
-
-//   for (const pkgID of allAssignedPackageIDs) {
+//   // 3️⃣ Insert into client_packages, avoid duplicates
+//   for (const pkgID of packageIDs) {
 //     const pkgRes = await pool.request()
 //       .input("packageID", sql.Int, pkgID)
 //       .query(`SELECT packageName FROM sg.LQ_CSS_fnb_packages WHERE packageID = @packageID`);
 //     const pkgName = pkgRes.recordset?.[0]?.packageName || "Unknown";
 
-//     // Calculate total quantity and value from package items
 //     const itemsRes = await pool.request()
 //       .input("clientID", sql.Int, clientID)
 //       .input("packageID", sql.Int, pkgID)
-//       .query(`SELECT quantity, p.price FROM sg.LQ_CSS_client_package_items cpi
-//               LEFT JOIN sg.LQ_CSS_fnb_products p ON cpi.productID = p.productID
-//               WHERE clientID = @clientID AND packageID = @packageID`);
+//       .query(`
+//         SELECT quantity, p.price 
+//         FROM sg.LQ_CSS_client_package_items cpi
+//         LEFT JOIN sg.LQ_CSS_fnb_products p ON cpi.productID = p.productID
+//         WHERE clientID = @clientID AND packageID = @packageID
+//       `);
 
-//     let totalQuantity = 0;
-//     let totalValue = 0;
-//     itemsRes.recordset.forEach(i => {
-//       totalQuantity += i.quantity || 0;
-//       totalValue += (i.quantity || 0) * (i.price || 0);
-//     });
+//     const totalQuantity = itemsRes.recordset.reduce((sum, i) => sum + (i.quantity || 0), 0);
+//     const totalValue = itemsRes.recordset.reduce((sum, i) => sum + ((i.quantity || 0) * (i.price || 0)), 0);
 
 //     await pool.request()
 //       .input("clientID", sql.Int, clientID)
@@ -516,70 +501,51 @@ export const isDefaultPackageAllowed = async (clientID, forDate = null) => {
 //       .input("quantity", sql.Int, totalQuantity)
 //       .input("totalValue", sql.Decimal(18,2), totalValue)
 //       .query(`
-//         INSERT INTO sg.LQ_CSS_client_packages
-//           (clientID, packageID, packageName, quantity, totalValue, createdAt)
-//         VALUES
-//           (@clientID, @packageID, @packageName, @quantity, @totalValue, GETDATE())
+//         IF NOT EXISTS (SELECT 1 FROM sg.LQ_CSS_client_packages WHERE clientID = @clientID AND packageID = @packageID)
+//           INSERT INTO sg.LQ_CSS_client_packages (clientID, packageID, packageName, quantity, totalValue, createdAt)
+//           VALUES (@clientID, @packageID, @packageName, @quantity, @totalValue, GETDATE());
 //       `);
 //   }
-//   // --- END NEW ---
 
-//   // 4) Generate QR + session
-//   // const qrDataUrl = await generateQrDataUrl({ clientID });
-//   // const sessionID = await createSession({ clientID, userName, pin, qrDataUrl, expiresAt: new Date(Date.now() + 7*24*60*60*1000) });
+//   // 4️⃣ Generate QR + session
+//   const tokenQr = crypto.randomBytes(16).toString("hex");
+//   await pool.request()
+//     .input("clientID", sql.Int, clientID)
+//     .input("tokenQr", sql.NVarChar(64), tokenQr)
+//     .query(`UPDATE sg.LQ_CSS_client_info SET tokenQr = @tokenQr WHERE clientID = @clientID`);
 
-//   // 4) Generate QR + session
-// const tokenQr = crypto.randomBytes(16).toString("hex"); // generate token
-// await pool.request()
-//   .input("clientID", sql.Int, clientID)
-//   .input("tokenQr", sql.NVarChar(64), tokenQr)
-//   .query(`UPDATE sg.LQ_CSS_client_info SET tokenQr = @tokenQr WHERE clientID = @clientID`);
+//   const qrDataUrl = await generateQrDataUrl({ tokenQr });
+//   const sessionID = await createSession({
+//     clientID,
+//     userName,
+//     pin,
+//     qrDataUrl,
+//     expiresAt: new Date(Date.now() + 7*24*60*60*1000)
+//   });
 
-// const qrDataUrl = await generateQrDataUrl({ tokenQr });
-// const sessionID = await createSession({
-//   clientID,
-//   userName,
-//   pin,
-//   qrDataUrl,
-//   expiresAt: new Date(Date.now() + 7*24*60*60*1000)
-// });
+//   // 5️⃣ Prepare package meta & items for frontend
+//   const pkgMetaRes = await pool.request()
+//     .query(`SELECT packageID, packageName, description FROM sg.LQ_CSS_fnb_packages WHERE packageID IN (${Array.from(packageIDs).join(",")})`);
 
-//   // 5) Prepare package meta for frontend
-//   const packageMeta = [];
-//   const packageIdsToFetch = new Set(allAssignedPackageIDs);
-//   if (packageIdsToFetch.size > 0) {
-//     const ids = Array.from(packageIdsToFetch).map(i => Number(i)).filter(Boolean);
-//     if (ids.length > 0) {
-//       const idsCsv = ids.join(",");
-//       const pkgRes = await pool.request().query(`SELECT packageID, packageName, description FROM sg.LQ_CSS_fnb_packages WHERE packageID IN (${idsCsv})`);
-//       for (const p of pkgRes.recordset) {
-//         packageMeta.push({ packageID: p.packageID, packageName: p.packageName, description: p.description });
-//       }
-//     }
-//   }
+//   const packageMeta = pkgMetaRes.recordset.map(p => ({
+//     packageID: p.packageID,
+//     packageName: p.packageName,
+//     description: p.description
+//   }));
 
-//   // 6) Fetch package items for response
-//   const itemsRes = await pool.request()
+//   const pkgItemsRes = await pool.request()
 //     .input("clientID", sql.Int, clientID)
 //     .query(`SELECT clientPackageItemID, productID, quantity, isDefault, packageID FROM sg.LQ_CSS_client_package_items WHERE clientID = @clientID ORDER BY isDefault DESC, createdAt ASC`);
-//   const packageItems = itemsRes.recordset || [];
+
+//   const packageItems = pkgItemsRes.recordset;
 
 //   return {
 //     success: true,
 //     message: "Client registered successfully",
 //     data: {
-//       client: {
-//         clientID,
-//         pin,
-//         clientSecret,
-//         qrDataUrl,
-//         sessionID,
-//         assignedDefaultPackageID: assignedDefaultPackageID || null,
-//         assignedSelectedPackageID: assignedSelectedPackageID || null,
-//         assignedExtraPackages
-//       },
-//       packageItems,
-//       packageMeta
+//       client: { clientID, pin, clientSecret, qrDataUrl, sessionID, assignedExtraPackages },
+//       packageMeta,
+//       packageItems
 //     }
 //   };
 // };
@@ -614,69 +580,50 @@ export const registerClientWithQR = async (client, userName) => {
   const clientID = insertResult.recordset?.[0]?.clientID;
   if (!clientID) throw new Error("Failed to register client");
 
-  // 2️⃣ Collect all package IDs to assign (default + selected + extra)
+  // 2️⃣ Collect all package IDs (default + chapel + extra)
   const packageIDs = new Set();
 
-  // Assign default package
+  // Default package
   const defaultPackageID = await assignDefaultPackageToClient(clientID);
   if (defaultPackageID) packageIDs.add(defaultPackageID);
 
-  // Selected/chosen package
-  let selectedPackageID = null;
-  if (client.packageNo) selectedPackageID = client.packageNo;
-  else if (client.chapelID) {
+  // Chapel package
+  if (client.chapelID) {
     const chapelRes = await pool.request()
       .input("chapelID", sql.Int, client.chapelID)
       .query(`SELECT packageID FROM sg.LQ_CSS_chapel_rooms WHERE chapelID = @chapelID`);
-    selectedPackageID = chapelRes.recordset?.[0]?.packageID || null;
-  }
-  if (selectedPackageID && !packageIDs.has(selectedPackageID)) {
-    await addPackageToClient(clientID, selectedPackageID, 1);
-    packageIDs.add(selectedPackageID);
+    const selectedPackageID = chapelRes.recordset?.[0]?.packageID;
+    if (selectedPackageID) packageIDs.add(selectedPackageID);
   }
 
   // Extra packages
-  const assignedExtraPackages = [];
   if (Array.isArray(client.extraPackages)) {
-    for (const extraPkgRaw of client.extraPackages) {
-      const extraPkgID = Number(extraPkgRaw);
-      if (!extraPkgID || packageIDs.has(extraPkgID)) continue;
-      const addRes = await addPackageToClient(clientID, extraPkgID, 0);
-      if (addRes.success) packageIDs.add(extraPkgID);
-      assignedExtraPackages.push({ packageID: extraPkgID, success: addRes.success, message: addRes.message });
+    for (const pkgRaw of client.extraPackages) {
+      const pkgID = Number(pkgRaw);
+      if (pkgID) packageIDs.add(pkgID);
     }
   }
 
-  // 3️⃣ Insert into client_packages, avoid duplicates
+  // 3️⃣ Insert into client_packages with package-level total quantity
   for (const pkgID of packageIDs) {
     const pkgRes = await pool.request()
       .input("packageID", sql.Int, pkgID)
-      .query(`SELECT packageName FROM sg.LQ_CSS_fnb_packages WHERE packageID = @packageID`);
+      .query(`SELECT packageName, quantity AS packageQuantity FROM sg.LQ_CSS_fnb_packages WHERE packageID = @packageID`);
+
     const pkgName = pkgRes.recordset?.[0]?.packageName || "Unknown";
-
-    const itemsRes = await pool.request()
-      .input("clientID", sql.Int, clientID)
-      .input("packageID", sql.Int, pkgID)
-      .query(`
-        SELECT quantity, p.price 
-        FROM sg.LQ_CSS_client_package_items cpi
-        LEFT JOIN sg.LQ_CSS_fnb_products p ON cpi.productID = p.productID
-        WHERE clientID = @clientID AND packageID = @packageID
-      `);
-
-    const totalQuantity = itemsRes.recordset.reduce((sum, i) => sum + (i.quantity || 0), 0);
-    const totalValue = itemsRes.recordset.reduce((sum, i) => sum + ((i.quantity || 0) * (i.price || 0)), 0);
+    const totalQuantity = pkgRes.recordset?.[0]?.packageQuantity || 50; // package-level total
+    const remainingQty = totalQuantity;
 
     await pool.request()
       .input("clientID", sql.Int, clientID)
       .input("packageID", sql.Int, pkgID)
       .input("packageName", sql.NVarChar(150), pkgName)
-      .input("quantity", sql.Int, totalQuantity)
-      .input("totalValue", sql.Decimal(18,2), totalValue)
+      .input("packageQuantity", sql.Int, totalQuantity)
+      .input("remainingQty", sql.Int, remainingQty)
       .query(`
         IF NOT EXISTS (SELECT 1 FROM sg.LQ_CSS_client_packages WHERE clientID = @clientID AND packageID = @packageID)
-          INSERT INTO sg.LQ_CSS_client_packages (clientID, packageID, packageName, quantity, totalValue, createdAt)
-          VALUES (@clientID, @packageID, @packageName, @quantity, @totalValue, GETDATE());
+          INSERT INTO sg.LQ_CSS_client_packages (clientID, packageID, packageName, quantity, remainingQty, createdAt)
+          VALUES (@clientID, @packageID, @packageName, @packageQuantity, @remainingQty, GETDATE());
       `);
   }
 
@@ -696,19 +643,16 @@ export const registerClientWithQR = async (client, userName) => {
     expiresAt: new Date(Date.now() + 7*24*60*60*1000)
   });
 
-  // 5️⃣ Prepare package meta & items for frontend
-  const pkgMetaRes = await pool.request()
-    .query(`SELECT packageID, packageName, description FROM sg.LQ_CSS_fnb_packages WHERE packageID IN (${Array.from(packageIDs).join(",")})`);
-
-  const packageMeta = pkgMetaRes.recordset.map(p => ({
-    packageID: p.packageID,
-    packageName: p.packageName,
-    description: p.description
-  }));
-
+  // 5️⃣ Prepare package items for frontend
   const pkgItemsRes = await pool.request()
     .input("clientID", sql.Int, clientID)
-    .query(`SELECT clientPackageItemID, productID, quantity, isDefault, packageID FROM sg.LQ_CSS_client_package_items WHERE clientID = @clientID ORDER BY isDefault DESC, createdAt ASC`);
+    .query(`
+      SELECT cpi.clientPackageItemID, cpi.productID, cpi.quantity AS productQuantity, p.productName, p.price, cpi.packageID
+      FROM sg.LQ_CSS_client_package_items cpi
+      LEFT JOIN sg.LQ_CSS_fnb_products p ON cpi.productID = p.productID
+      WHERE cpi.clientID = @clientID
+      ORDER BY cpi.packageID, cpi.clientPackageItemID
+    `);
 
   const packageItems = pkgItemsRes.recordset;
 
@@ -716,8 +660,7 @@ export const registerClientWithQR = async (client, userName) => {
     success: true,
     message: "Client registered successfully",
     data: {
-      client: { clientID, pin, clientSecret, qrDataUrl, sessionID, assignedExtraPackages },
-      packageMeta,
+      client: { clientID, pin, clientSecret, qrDataUrl, sessionID },
       packageItems
     }
   };
