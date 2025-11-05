@@ -274,24 +274,81 @@ export const deletePackage = async (packageID) => {
 };
 
 // -------------------- Package Items --------------------
+// export const getPackageItems = async (packageID) => {
+//   const pool = await poolPromise;
+//   const res = await pool.request()
+//     .input("packageID", sql.Int, packageID)
+//     .query(`
+//       SELECT 
+//         i.packageItemID, i.packageID, i.productID, p.productName, p.price, i.quantity,
+//         p.sizeId, s.size , p.categoryID, c.categoryName  
+//       FROM sg.LQ_CSS_fnb_package_items i
+//       INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
+//       LEFT JOIN sg.LQ_CSS_product_sizes s ON p.sizeId = s.sizeId
+//       LEFT JOIN sg.LQ_CSS_fnb_categories c ON p.categoryID = c.categoryID
+//       WHERE i.packageID = @packageID
+//     `);
+
+//   // Return only items (no remainingValue)
+//   return res.recordset || [];
+// };
+
 export const getPackageItems = async (packageID) => {
   const pool = await poolPromise;
+
+  // Fetch package info and items
   const res = await pool.request()
     .input("packageID", sql.Int, packageID)
     .query(`
       SELECT 
-        i.packageItemID, i.packageID, i.productID, p.productName, p.price, i.quantity,
-        p.sizeId, s.size , p.categoryID, c.categoryName  
-      FROM sg.LQ_CSS_fnb_package_items i
-      INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
-      LEFT JOIN sg.LQ_CSS_product_sizes s ON p.sizeId = s.sizeId
-      LEFT JOIN sg.LQ_CSS_fnb_categories c ON p.categoryID = c.categoryID
-      WHERE i.packageID = @packageID
+          pck.packageID,
+          pck.packageName,
+          pck.quantity AS packageQuantity,
+          i.packageItemID,
+          i.productID,
+          pr.productName,
+          pr.price,
+          pr.sizeId,
+          sz.size,
+          pr.categoryID,
+          cat.categoryName
+      FROM sg.LQ_CSS_fnb_packages AS pck
+      LEFT JOIN sg.LQ_CSS_fnb_package_items AS i ON pck.packageID = i.packageID
+      LEFT JOIN sg.LQ_CSS_fnb_products AS pr ON i.productID = pr.productID
+      LEFT JOIN sg.LQ_CSS_product_sizes AS sz ON pr.sizeId = sz.sizeId
+      LEFT JOIN sg.LQ_CSS_fnb_categories AS cat ON pr.categoryID = cat.categoryID
+      WHERE pck.packageID = @packageID
+      ORDER BY i.packageItemID ASC;
     `);
 
-  // Return only items (no remainingValue)
-  return res.recordset || [];
+  if (!res.recordset.length) {
+    return { success: false, message: "No items found for this package." };
+  }
+
+  const pkg = res.recordset[0];
+  const items = res.recordset.map(r => ({
+    packageItemID: r.packageItemID,
+    productID: r.productID,
+    productName: r.productName,
+    price: r.price,
+    sizeId: r.sizeId,
+    size: r.size,
+    categoryID: r.categoryID,
+    categoryName: r.categoryName
+  }));
+
+  return {
+    success: true,
+    message: "Package items fetched successfully",
+    data: {
+      packageID: pkg.packageID,
+      packageName: pkg.packageName,
+      qty: pkg.packageQuantity,
+      items
+    }
+  };
 };
+
 
 export const addPackageItem = async (packageID, productID) => {
   const pool = await poolPromise;

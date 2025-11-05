@@ -172,13 +172,30 @@ export const deletePackage = async (req, res) => {
 };
 
 // -------------------- Package Items --------------------
+// export const listPackageItems = async (req, res) => {
+//   try {
+//     const { packageID } = req.params;
+//     if (!packageID) return error(res, "packageID is required", 400);
+
+//     const items = await Model.getPackageItems(packageID);
+//     return success(res, items, "Package items fetched successfully");
+//   } catch (e) {
+//     console.error("❌ listPackageItems error:", e);
+//     return error(res, e.message);
+//   }
+// };
 export const listPackageItems = async (req, res) => {
   try {
     const { packageID } = req.params;
     if (!packageID) return error(res, "packageID is required", 400);
 
-    const items = await Model.getPackageItems(packageID);
-    return success(res, items, "Package items fetched successfully");
+    const result = await Model.getPackageItems(packageID);
+
+    if (!result.success) {
+      return error(res, result.message || "No items found for this package", 404);
+    }
+
+    return success(res, result.data, result.message);
   } catch (e) {
     console.error("❌ listPackageItems error:", e);
     return error(res, e.message);
