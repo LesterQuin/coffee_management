@@ -304,6 +304,7 @@ export const getPackageItems = async (packageID) => {
           pck.packageID,
           pck.packageName,
           pck.quantity AS packageQuantity,
+          pck.totalValue,
           i.packageItemID,
           i.productID,
           pr.productName,
@@ -344,6 +345,7 @@ export const getPackageItems = async (packageID) => {
       packageID: pkg.packageID,
       packageName: pkg.packageName,
       qty: pkg.packageQuantity,
+      totalValue: pkg.totalValue,
       items
     }
   };
