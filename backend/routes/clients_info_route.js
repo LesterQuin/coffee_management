@@ -15,6 +15,8 @@ router.get("/:clientID", staffAuth, Controller.getClientById);
 router.post("/register", staffAuth, Controller.registerClient);
 // Client login
 router.post("/login", Controller.clientLogin);
+// Generate new PIN manually
+router.post("/:clientID/generatePin", staffAuth, Controller.generatePin);
 // ----------------------PUT-------------------------
 // Update client information
 router.put("/:clientID", staffAuth, Controller.update);

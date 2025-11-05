@@ -409,7 +409,8 @@ export const isDefaultPackageAllowed = async (clientID, forDate = null) => {
   return ymd(today) >= ymd(from) && ymd(today) <= ymd(lastAllowed);
 };
 
-// ---------------------- POST (register with clientSecret & static QR) -------------------------
+//---------------------- POST (register with clientSecret & static QR) -------------------------
+// 
 // export const registerClientWithQR = async (client, userName) => {
 //   const pool = await poolPromise;
 //   const pin = Math.floor(100000 + Math.random() * 900000).toString();

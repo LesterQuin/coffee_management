@@ -44,6 +44,22 @@ export const getClientById = async (req, res) => {
   }
 };
 
+// Manually generate or refresh a PIN for a client
+export const generatePin = async (req, res) => {
+  try {
+    const clientID = parseInt(req.params.clientID, 10);
+    if (isNaN(clientID)) return error(res, "Invalid clientID", 400);
+
+    const newPin = Model.generateDailyPin(clientID); // reuse existing logic
+    await Model.updateClientPin(clientID, newPin);
+
+    return success(res, { clientID, newPin }, "New PIN generated successfully");
+  } catch (e) {
+    console.error("❌ GeneratePin Error:", e);
+    return error(res, e.message || "Server error");
+  }
+};
+
 // Register client (staff)
 // export const registerClient = async (req, res) => {
 //   try {
@@ -70,9 +86,15 @@ export const registerClient = async (req, res) => {
     const newClientID = result?.data?.client?.clientID;
     if (!newClientID) return error(res, "Failed to register client ID");
 
-    // ✅ Generate and save today's PIN immediately
-    const todayPin = Model.generateDailyPin(newClientID);
-    await Model.updateClientPin(newClientID, todayPin); // You’ll need this function in your model
+    // // ✅ Generate and save today's PIN immediately
+    // const todayPin = Model.generateDailyPin(newClientID);
+    // await Model.updateClientPin(newClientID, todayPin); // Generate daily new PIN
+    
+    // Optional: use provided PIN or skip generation
+    if (req.body.generatePin === true) {
+      const newPin = Model.generateDailyPin(newClientID);
+      await Model.updateClientPin(newClientID, newPin);
+    }
 
     // Return success with today’s PIN for immediate login
     return success(
@@ -106,8 +128,12 @@ export const clientLogin = async (req, res) => {
       return error(res, "Your session schedule has expired or not yet started");
     }
 
-    const todayPin = Model.generateDailyPin(client.clientID);
-    if (pin !== todayPin) return error(res, "Invalid PIN");
+    // const todayPin = Model.generateDailyPin(client.clientID);
+    // if (pin !== todayPin) return error(res, "Invalid PIN"); // Pin generate daily
+    
+    // Fetch stored PIN from DB
+    const storedPin = client.pin;
+    if (pin !== storedPin) return error(res, "Invalid PIN");
 
     const expiresAt = new Date(Date.now() + 6 * 60 * 60 * 1000); // 6 hours
     const sessionId = await createSession({
