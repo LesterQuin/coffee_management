@@ -5,9 +5,18 @@ export const fetchLatestDefaultPackage = async () => {
   const pool = await poolPromise;
   const res = await pool.request()
     .query(`
-      SELECT TOP 1 defaultID, packageID, createdAt
-      FROM sg.LQ_CSS_default_package
-      ORDER BY createdAt DESC, defaultID DESC
+      SELECT TOP 1 
+          d.defaultID,
+          d.packageID,
+          p.packageName,
+          p.quantity,
+          d.createdAt
+      FROM sg.LQ_CSS_default_package AS d
+      INNER JOIN sg.LQ_CSS_fnb_packages AS p
+          ON d.packageID = p.packageID
+      ORDER BY 
+          d.createdAt DESC, 
+          d.defaultID DESC;
     `);
   return res.recordset[0] || null;
 };

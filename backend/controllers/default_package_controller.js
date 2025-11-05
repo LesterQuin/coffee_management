@@ -5,7 +5,7 @@ export const getDefaultPackage = async (req, res) => {
   try {
     const row = await Model.fetchLatestDefaultPackage();
     if (!row) return success(res, null, "No default package set");
-    return success(res, { packageID: row.packageID, defaultID: row.defaultID, createdAt: row.createdAt }, "Default package fetched");
+    return success(res, { packageID: row.packageID, defaultID: row.defaultID, packageName: row.packageName, qty: row.quantity, createdAt: row.createdAt }, "Default package fetched");
   } catch (e) {
     console.error("❌ getDefaultPackage error:", e);
     return error(res, e.message || "Server error");
