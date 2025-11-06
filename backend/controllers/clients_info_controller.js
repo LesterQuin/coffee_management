@@ -27,17 +27,28 @@ export const getClientByPin = async (req, res) => {
 };
 
 // Get client by ID (staff)
-export const getClientById = async (req, res) => {
+export const getClientByIdController = async (req, res) => {
   try {
     const clientID = parseInt(req.params.clientID, 10);
     if (isNaN(clientID)) return error(res, "Invalid clientID", 400);
 
-    const raw = await Model.getClientById(clientID);
-    if (!raw) return error(res, "Client not found", 404);
-    const client = (raw && Model.mapClientRow) ? Model.mapClientRow(raw) : raw;
+    const client = await Model.getClientById(clientID);
+    if (!client) return error(res, "Client not found", 404);
 
     const packageSummary = await Model.getClientPackageSummary(clientID);
-    return success(res, { ...client, packageSummary }, "Client fetched successfully");
+    const contacts = await Model.getClientContacts(clientID);
+    const chapelName = await Model.getChapelName(client.chapelID);
+
+    // Remove redundant top-level contact fields
+    const { contactPersonName, contactPersonNumber, ...clientData } = client;
+
+    return success(res, {
+      ...clientData,
+      chapelName,
+      packageSummary,
+      contacts
+    }, "Client fetched successfully");
+
   } catch (e) {
     console.error("❌ getClientById error:", e);
     return error(res, e.message || "Internal server error");
@@ -74,39 +85,127 @@ export const generatePin = async (req, res) => {
 //   }
 // };
 
-// Register client (staff)
+// export const registerClient = async (req, res) => {
+//   try {
+//     const userName = req.user?.name || "unknown";
+
+//     // 1️⃣ Register client
+//     const result = await Model.registerClientWithQR(req.body, userName);
+
+//     // 2️⃣ Extract new client ID
+//     const newClientID = result?.data?.client?.clientID;
+//     if (!newClientID) return error(res, "Failed to register client ID");
+
+//     // 3️⃣ Optionally generate a new daily PIN
+//     let todayPin = null;
+//     if (req.body.generatePin === true) {
+//       todayPin = Model.generateDailyPin(newClientID);
+//       await Model.updateClientPin(newClientID, todayPin);
+//     }
+
+//     // 4️⃣ Return success (only include todayPin if generated)
+//     return success(
+//       res,
+//       {
+//         ...result.data,
+//         ...(todayPin ? { todayPin } : {}),
+//       },
+//       todayPin
+//         ? "Client registered successfully. PIN generated for today."
+//         : "Client registered successfully."
+//     );
+//   } catch (e) {
+//     console.error("❌ Register Error:", e);
+//     return error(res, e.message);
+//   }
+// }; my old pin that need to generate new PIN before login
+
 export const registerClient = async (req, res) => {
   try {
     const userName = req.user?.name || "unknown";
 
-    // Register client
+    // 1️⃣ Register client
     const result = await Model.registerClientWithQR(req.body, userName);
 
-    // Extract the new client ID from the result
+    // 2️⃣ Extract new client ID and initial PIN
     const newClientID = result?.data?.client?.clientID;
+    let activePin = result?.data?.client?.pin; // 👈 initial PIN from model
     if (!newClientID) return error(res, "Failed to register client ID");
 
-    // // ✅ Generate and save today's PIN immediately
-    // const todayPin = Model.generateDailyPin(newClientID);
-    // await Model.updateClientPin(newClientID, todayPin); // Generate daily new PIN
-    
-    // Optional: use provided PIN or skip generation
+    // 3️⃣ Optionally generate a new daily PIN (overwrite)
     if (req.body.generatePin === true) {
-      const newPin = Model.generateDailyPin(newClientID);
-      await Model.updateClientPin(newClientID, newPin);
+      activePin = Model.generateDailyPin(newClientID);
+      await Model.updateClientPin(newClientID, activePin);
     }
 
-    // Return success with today’s PIN for immediate login
+    // 4️⃣ Return success with correct active PIN
     return success(
       res,
-      { ...result.data, todayPin },
-      "Client registered successfully. PIN generated for today."
+      {
+        ...result.data,
+        todayPin: activePin, // 👈 always include the valid PIN
+      },
+      req.body.generatePin
+        ? "Client registered successfully. New PIN generated."
+        : "Client registered successfully."
     );
   } catch (e) {
     console.error("❌ Register Error:", e);
     return error(res, e.message);
   }
-};
+}; // new code the no need to generate new pin to login, just request a new pin
+
+// Client login (QR or clientID + pin). Public route.
+// export const clientLogin = async (req, res) => {
+//   try {
+//     const clientSecret = req.query.secret;
+//     const { userName, pin } = req.body;
+
+//     if (!clientSecret || !pin) return error(res, "Invalid PIN");
+
+//     const client = await Model.getClientBySecret(clientSecret);
+//     if (!client) return error(res, "Invalid PIN");
+//     if (client.status !== "Active") return error(res, "Invalid PIN");
+
+//     const now = new Date();
+//     const start = new Date(client.schedule_from);
+//     const end = new Date(client.schedule_to);
+
+//     if (now < start || now > end) {
+//       return error(res, "Your session schedule has expired or not yet started");
+//     }
+
+//     // const todayPin = Model.generateDailyPin(client.clientID);
+//     // if (pin !== todayPin) return error(res, "Invalid PIN"); // Pin generate daily
+    
+//     // Fetch stored PIN from DB
+//     const storedPin = client.pin;
+//     if (pin !== storedPin) return error(res, "Invalid PIN");
+
+//     const expiresAt = new Date(Date.now() + 6 * 60 * 60 * 1000); // 6 hours
+//     const sessionId = await createSession({
+//       clientID: client.clientID,
+//       userName: userName || client.deceasedName || `client-${client.clientID}`,
+//       pin: todayPin,
+//       qrDataUrl: null,
+//       expiresAt
+//     });
+
+//     return success(res, {
+//       sessionId,
+//       clientID: client.clientID,
+//       deceasedName: client.deceasedName,
+//       chapelID: client.chapelID,
+//       chapelName: client.chapelName,
+//       packageNo: client.packageNo,
+//       packageName: client.packageName,
+//       expiresAt
+//     }, "Login success");
+//   } catch (e) {
+//     console.error("❌ ClientLogin error", e);
+//     return error(res, e.message || "Server error");
+//   }
+// }; old code without validation in qr
 
 // Client login (QR or clientID + pin). Public route.
 export const clientLogin = async (req, res) => {
@@ -114,51 +213,64 @@ export const clientLogin = async (req, res) => {
     const clientSecret = req.query.secret;
     const { userName, pin } = req.body;
 
-    if (!clientSecret || !pin) return error(res, "Invalid PIN");
+    if (!clientSecret || !pin) return error(res, "Invalid or missing credentials");
 
     const client = await Model.getClientBySecret(clientSecret);
-    if (!client) return error(res, "Invalid PIN");
-    if (client.status !== "Active") return error(res, "Invalid PIN");
+    if (!client) return error(res, "Client not found");
+    if (client.status !== "Active") return error(res, "Client is inactive");
 
     const now = new Date();
     const start = new Date(client.schedule_from);
     const end = new Date(client.schedule_to);
 
-    if (now < start || now > end) {
-      return error(res, "Your session schedule has expired or not yet started");
+    // 🧠 Block access if QR is scanned outside schedule range
+    if (now < start) {
+      return error(res, "QR access not yet available. Schedule has not started.");
     }
 
-    // const todayPin = Model.generateDailyPin(client.clientID);
-    // if (pin !== todayPin) return error(res, "Invalid PIN"); // Pin generate daily
-    
-    // Fetch stored PIN from DB
+    if (now > end) {
+      return error(res, "QR access expired. Schedule already ended.");
+    }
+
+    // ✅ Validate PIN
     const storedPin = client.pin;
     if (pin !== storedPin) return error(res, "Invalid PIN");
 
-    const expiresAt = new Date(Date.now() + 6 * 60 * 60 * 1000); // 6 hours
+    // 🧩 Optional safeguard — double-check if session should still be allowed
+    // (you can skip this if unnecessary)
+    if (new Date() > end) {
+      return error(res, "QR expired. Schedule period has ended.");
+    }
+
+    // ✅ Create new session (6-hour validity)
+    const expiresAt = new Date(Date.now() + 6 * 60 * 60 * 1000);
     const sessionId = await createSession({
       clientID: client.clientID,
       userName: userName || client.deceasedName || `client-${client.clientID}`,
-      pin: todayPin,
+      pin: storedPin,
       qrDataUrl: null,
-      expiresAt
+      expiresAt,
     });
 
-    return success(res, {
-      sessionId,
-      clientID: client.clientID,
-      deceasedName: client.deceasedName,
-      chapelID: client.chapelID,
-      chapelName: client.chapelName,
-      packageNo: client.packageNo,
-      packageName: client.packageName,
-      expiresAt
-    }, "Login success");
+    return success(
+      res,
+      {
+        sessionId,
+        clientID: client.clientID,
+        deceasedName: client.deceasedName,
+        chapelID: client.chapelID,
+        chapelName: client.chapelName,
+        packageNo: client.packageNo,
+        packageName: client.packageName,
+        expiresAt,
+      },
+      "Login success"
+    );
   } catch (e) {
-    console.error("❌ ClientLogin error", e);
+    console.error("❌ ClientLogin error:", e);
     return error(res, e.message || "Server error");
   }
-};
+}; // new code with validation in qr
 
 // Consume item (staff/cashier or kiosk with session)
 export const consumeItem = async (req, res) => {
@@ -198,21 +310,64 @@ export const addPackage = async (req, res) => {
 };
 
 // Update client (staff)
+// export const update = async (req, res) => {
+//   try {
+//     const clientID = req.params.clientID;
+//     const fieldsToUpdate = req.body || {};
+//     if (!clientID) return error(res, "ClientID is required", 400);
+//     if (Object.keys(fieldsToUpdate).length === 0) return error(res, "No fields provided to update", 400);
+
+//     const updated = await Model.updateClient({ clientID, ...fieldsToUpdate });
+//     if (!updated) return error(res, "Client not found or no changes applied", 400);
+//     return success(res, null, "Client updated successfully");
+//   } catch (e) {
+//     console.error("❌ Update Client Error:", e);
+//     return error(res, e.message || "Server error");
+//   }
+// }; // old version of update
+
 export const update = async (req, res) => {
   try {
-    const clientID = req.params.clientID;
+    const clientID = parseInt(req.params.clientID, 10);
     const fieldsToUpdate = req.body || {};
-    if (!clientID) return error(res, "ClientID is required", 400);
-    if (Object.keys(fieldsToUpdate).length === 0) return error(res, "No fields provided to update", 400);
 
+    if (!clientID) return error(res, "ClientID is required", 400);
+    if (Object.keys(fieldsToUpdate).length === 0)
+      return error(res, "No fields provided to update", 400);
+
+    // Normalize input arrays
+    if (fieldsToUpdate.contactPersons && !Array.isArray(fieldsToUpdate.contactPersons)) {
+      fieldsToUpdate.contactPersons = [fieldsToUpdate.contactPersons];
+    }
+
+    if (fieldsToUpdate.extraPackages && !Array.isArray(fieldsToUpdate.extraPackages)) {
+      fieldsToUpdate.extraPackages = [fieldsToUpdate.extraPackages];
+    }
+
+    if (fieldsToUpdate.removePackages && !Array.isArray(fieldsToUpdate.removePackages)) {
+      fieldsToUpdate.removePackages = [fieldsToUpdate.removePackages];
+    }
+
+    // Normalize packageId → packageID
+    if (fieldsToUpdate.extraPackages) {
+      fieldsToUpdate.extraPackages = fieldsToUpdate.extraPackages.map(pkg => ({
+        ...pkg,
+        packageID: pkg.packageID || pkg.packageId,
+      }));
+    }
+
+    // Call model update
     const updated = await Model.updateClient({ clientID, ...fieldsToUpdate });
-    if (!updated) return error(res, "Client not found or no changes applied", 400);
+
+    if (!updated)
+      return error(res, "Client not found or no changes applied", 400);
+
     return success(res, null, "Client updated successfully");
   } catch (e) {
     console.error("❌ Update Client Error:", e);
     return error(res, e.message || "Server error");
   }
-};
+}; // new version of update
 
 // Raise balance (staff)
 export const raiseBalance = async (req, res) => {

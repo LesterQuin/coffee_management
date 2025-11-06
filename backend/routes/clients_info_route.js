@@ -9,10 +9,10 @@ router.get("/", staffAuth, Controller.getAllClients);
 // Get client by PIN (put first)
 router.get("/pin/:pin", staffAuth, Controller.getClientByPin);
 // Get client by ID (after PIN route)
-router.get("/:clientID", staffAuth, Controller.getClientById);
+router.get("/:clientID", Controller.getClientByIdController);
 // ----------------------POST-------------------------
 // Register a new client
-router.post("/register", staffAuth, Controller.registerClient);
+router.post("/register", Controller.registerClient);
 // Client login
 router.post("/login", Controller.clientLogin);
 // Generate new PIN manually

@@ -188,6 +188,42 @@ export const getClientById = async (clientID) => {
   return result.recordset[0] ? result.recordset[0] : null;
 };
 
+export const getClientPackageSummary = async (clientID) => {
+  const pool = await poolPromise;
+  const result = await pool.request()
+    .input("clientID", sql.Int, clientID)
+    .query(`
+      SELECT packageID, packageName, description, totalValue, quantity, remainingQty, validFrom, validTo
+      FROM sg.LQ_CSS_client_packages
+      WHERE clientId = @clientID
+    `);
+  return result.recordset;
+};
+
+export const getClientContacts = async (clientID) => {
+  const pool = await poolPromise;
+  const result = await pool.request()
+    .input("clientID", sql.Int, clientID)
+    .query(`
+      SELECT contactID, contactPersonName, contactPersonNumber, createdAt
+      FROM sg.LQ_CSS_client_contacts
+      WHERE clientID = @clientID
+    `);
+  return result.recordset; // returns an array of contacts
+};
+
+export const getChapelName = async (chapelID) => {
+  const pool = await poolPromise;
+  const result = await pool.request()
+    .input("chapelID", sql.Int, chapelID)
+    .query(`
+      SELECT chapelName 
+      FROM sg.LQ_CSS_chapel_rooms
+      WHERE chapelID = @chapelID
+    `);
+  return result.recordset[0]?.chapelName || null;
+};
+
 export const getClientByPin = async (pin) => {
   const pool = await poolPromise;
   const result = await pool.request()
@@ -303,9 +339,9 @@ export const getClientWithPackageSummaryTest = async (clientID) => {
         WHERE packageID IN (@secondPackageID, @firstPackageID);
       `);
 
-     const packageSummary = packageDetailsResult.recordset[0];
+      const packageSummary = packageDetailsResult.recordset[0];
 
-     const productListResult = await pool.request()
+      const productListResult = await pool.request()
       .input("secondPackageID", sql.Int, secondPackageID)
       .input("firstPackageID", sql.Int, firstPackageID)
       .query(`
@@ -410,7 +446,7 @@ export const isDefaultPackageAllowed = async (clientID, forDate = null) => {
 };
 
 //---------------------- POST (register with clientSecret & static QR) -------------------------
-// 
+
 // export const registerClientWithQR = async (client, userName) => {
 //   const pool = await poolPromise;
 //   const pin = Math.floor(100000 + Math.random() * 900000).toString();
@@ -442,69 +478,50 @@ export const isDefaultPackageAllowed = async (clientID, forDate = null) => {
 //   const clientID = insertResult.recordset?.[0]?.clientID;
 //   if (!clientID) throw new Error("Failed to register client");
 
-//   // 2️⃣ Collect all package IDs to assign (default + selected + extra)
+//   // 2️⃣ Collect all package IDs (default + chapel + extra)
 //   const packageIDs = new Set();
 
-//   // Assign default package
+//   // Default package
 //   const defaultPackageID = await assignDefaultPackageToClient(clientID);
 //   if (defaultPackageID) packageIDs.add(defaultPackageID);
 
-//   // Selected/chosen package
-//   let selectedPackageID = null;
-//   if (client.packageNo) selectedPackageID = client.packageNo;
-//   else if (client.chapelID) {
+//   // Chapel package
+//   if (client.chapelID) {
 //     const chapelRes = await pool.request()
 //       .input("chapelID", sql.Int, client.chapelID)
 //       .query(`SELECT packageID FROM sg.LQ_CSS_chapel_rooms WHERE chapelID = @chapelID`);
-//     selectedPackageID = chapelRes.recordset?.[0]?.packageID || null;
-//   }
-//   if (selectedPackageID && !packageIDs.has(selectedPackageID)) {
-//     await addPackageToClient(clientID, selectedPackageID, 1);
-//     packageIDs.add(selectedPackageID);
+//     const selectedPackageID = chapelRes.recordset?.[0]?.packageID;
+//     if (selectedPackageID) packageIDs.add(selectedPackageID);
 //   }
 
 //   // Extra packages
-//   const assignedExtraPackages = [];
 //   if (Array.isArray(client.extraPackages)) {
-//     for (const extraPkgRaw of client.extraPackages) {
-//       const extraPkgID = Number(extraPkgRaw);
-//       if (!extraPkgID || packageIDs.has(extraPkgID)) continue;
-//       const addRes = await addPackageToClient(clientID, extraPkgID, 0);
-//       if (addRes.success) packageIDs.add(extraPkgID);
-//       assignedExtraPackages.push({ packageID: extraPkgID, success: addRes.success, message: addRes.message });
+//     for (const pkgRaw of client.extraPackages) {
+//       const pkgID = Number(pkgRaw);
+//       if (pkgID) packageIDs.add(pkgID);
 //     }
 //   }
 
-//   // 3️⃣ Insert into client_packages, avoid duplicates
+//   // 3️⃣ Insert into client_packages with package-level total quantity
 //   for (const pkgID of packageIDs) {
 //     const pkgRes = await pool.request()
 //       .input("packageID", sql.Int, pkgID)
-//       .query(`SELECT packageName FROM sg.LQ_CSS_fnb_packages WHERE packageID = @packageID`);
+//       .query(`SELECT packageName, quantity AS packageQuantity FROM sg.LQ_CSS_fnb_packages WHERE packageID = @packageID`);
+
 //     const pkgName = pkgRes.recordset?.[0]?.packageName || "Unknown";
-
-//     const itemsRes = await pool.request()
-//       .input("clientID", sql.Int, clientID)
-//       .input("packageID", sql.Int, pkgID)
-//       .query(`
-//         SELECT quantity, p.price 
-//         FROM sg.LQ_CSS_client_package_items cpi
-//         LEFT JOIN sg.LQ_CSS_fnb_products p ON cpi.productID = p.productID
-//         WHERE clientID = @clientID AND packageID = @packageID
-//       `);
-
-//     const totalQuantity = itemsRes.recordset.reduce((sum, i) => sum + (i.quantity || 0), 0);
-//     const totalValue = itemsRes.recordset.reduce((sum, i) => sum + ((i.quantity || 0) * (i.price || 0)), 0);
+//     const totalQuantity = pkgRes.recordset?.[0]?.packageQuantity || 50; // package-level total
+//     const remainingQty = totalQuantity;
 
 //     await pool.request()
 //       .input("clientID", sql.Int, clientID)
 //       .input("packageID", sql.Int, pkgID)
 //       .input("packageName", sql.NVarChar(150), pkgName)
-//       .input("quantity", sql.Int, totalQuantity)
-//       .input("totalValue", sql.Decimal(18,2), totalValue)
+//       .input("packageQuantity", sql.Int, totalQuantity)
+//       .input("remainingQty", sql.Int, remainingQty)
 //       .query(`
 //         IF NOT EXISTS (SELECT 1 FROM sg.LQ_CSS_client_packages WHERE clientID = @clientID AND packageID = @packageID)
-//           INSERT INTO sg.LQ_CSS_client_packages (clientID, packageID, packageName, quantity, totalValue, createdAt)
-//           VALUES (@clientID, @packageID, @packageName, @quantity, @totalValue, GETDATE());
+//           INSERT INTO sg.LQ_CSS_client_packages (clientID, packageID, packageName, quantity, remainingQty, createdAt)
+//           VALUES (@clientID, @packageID, @packageName, @packageQuantity, @remainingQty, GETDATE());
 //       `);
 //   }
 
@@ -524,19 +541,16 @@ export const isDefaultPackageAllowed = async (clientID, forDate = null) => {
 //     expiresAt: new Date(Date.now() + 7*24*60*60*1000)
 //   });
 
-//   // 5️⃣ Prepare package meta & items for frontend
-//   const pkgMetaRes = await pool.request()
-//     .query(`SELECT packageID, packageName, description FROM sg.LQ_CSS_fnb_packages WHERE packageID IN (${Array.from(packageIDs).join(",")})`);
-
-//   const packageMeta = pkgMetaRes.recordset.map(p => ({
-//     packageID: p.packageID,
-//     packageName: p.packageName,
-//     description: p.description
-//   }));
-
+//   // 5️⃣ Prepare package items for frontend
 //   const pkgItemsRes = await pool.request()
 //     .input("clientID", sql.Int, clientID)
-//     .query(`SELECT clientPackageItemID, productID, quantity, isDefault, packageID FROM sg.LQ_CSS_client_package_items WHERE clientID = @clientID ORDER BY isDefault DESC, createdAt ASC`);
+//     .query(`
+//       SELECT cpi.clientPackageItemID, cpi.productID, cpi.quantity AS productQuantity, p.productName, p.price, cpi.packageID
+//       FROM sg.LQ_CSS_client_package_items cpi
+//       LEFT JOIN sg.LQ_CSS_fnb_products p ON cpi.productID = p.productID
+//       WHERE cpi.clientID = @clientID
+//       ORDER BY cpi.packageID, cpi.clientPackageItemID
+//     `);
 
 //   const packageItems = pkgItemsRes.recordset;
 
@@ -544,12 +558,12 @@ export const isDefaultPackageAllowed = async (clientID, forDate = null) => {
 //     success: true,
 //     message: "Client registered successfully",
 //     data: {
-//       client: { clientID, pin, clientSecret, qrDataUrl, sessionID, assignedExtraPackages },
-//       packageMeta,
+//       client: { clientID, pin, clientSecret, qrDataUrl, sessionID },
 //       packageItems
 //     }
 //   };
 // };
+
 export const registerClientWithQR = async (client, userName) => {
   const pool = await poolPromise;
   const pin = Math.floor(100000 + Math.random() * 900000).toString();
@@ -565,70 +579,111 @@ export const registerClientWithQR = async (client, userName) => {
     .input("scheduleTo", sql.DateTime, client.scheduleTo)
     .input("chapelID", sql.Int, client.chapelID)
     .input("pin", sql.NVarChar(10), pin)
-    .input("packageBalance", sql.Decimal(18,2), client.packageBalance ?? 0)
-    .input("additionalBalance", sql.Decimal(18,2), client.additionalBalance ?? 0)
-    .input("contactPersonName", sql.NVarChar(150), client.contactPersonName)
-    .input("contactPersonNumber", sql.NVarChar(50), client.contactPersonNumber)
+    .input("packageBalance", sql.Decimal(18, 2), client.packageBalance ?? 0)
+    .input("additionalBalance", sql.Decimal(18, 2), client.additionalBalance ?? 0)
     .input("clientSecret", sql.NVarChar(64), clientSecret)
     .query(`
       INSERT INTO sg.LQ_CSS_client_info
-        (deceasedName, registeredBy, mobileNo, email, schedule_from, schedule_to, chapelID, pin, packageBalance, additionalBalance, contactPersonName, contactPersonNumber, clientSecret, status, createdAt, updatedAt)
+        (deceasedName, registeredBy, mobileNo, email, schedule_from, schedule_to, chapelID, pin,
+        packageBalance, additionalBalance, clientSecret, status, createdAt, updatedAt)
       VALUES
-        (@deceasedName, @registeredBy, @mobileNo, @email, @scheduleFrom, @scheduleTo, @chapelID, @pin, @packageBalance, @additionalBalance, @contactPersonName, @contactPersonNumber, @clientSecret, 'Active', GETDATE(), GETDATE());
+        (@deceasedName, @registeredBy, @mobileNo, @email, @scheduleFrom, @scheduleTo, @chapelID,
+        @pin, @packageBalance, @additionalBalance, @clientSecret, 'Active', GETDATE(), GETDATE());
       SELECT SCOPE_IDENTITY() AS clientID;
     `);
 
   const clientID = insertResult.recordset?.[0]?.clientID;
   if (!clientID) throw new Error("Failed to register client");
 
-  // 2️⃣ Collect all package IDs (default + chapel + extra)
-  const packageIDs = new Set();
+  // 2️⃣ Insert multiple contact persons
+  if (Array.isArray(client.contactPersons)) {
+    for (const cp of client.contactPersons) {
+      if (!cp.name || !cp.number) continue;
+      await pool.request()
+        .input("clientID", sql.Int, clientID)
+        .input("contactPersonName", sql.NVarChar(150), cp.name)
+        .input("contactPersonNumber", sql.NVarChar(50), cp.number)
+        .query(`
+          INSERT INTO sg.LQ_CSS_client_contacts
+            (clientID, contactPersonName, contactPersonNumber)
+          VALUES (@clientID, @contactPersonName, @contactPersonNumber);
+        `);
+    }
+  }
 
-  // Default package
+  // 3️⃣ Collect package IDs (default + extraPackages)
+  const packageIDs = new Set();
   const defaultPackageID = await assignDefaultPackageToClient(clientID);
   if (defaultPackageID) packageIDs.add(defaultPackageID);
 
-  // Chapel package
-  if (client.chapelID) {
-    const chapelRes = await pool.request()
-      .input("chapelID", sql.Int, client.chapelID)
-      .query(`SELECT packageID FROM sg.LQ_CSS_chapel_rooms WHERE chapelID = @chapelID`);
-    const selectedPackageID = chapelRes.recordset?.[0]?.packageID;
-    if (selectedPackageID) packageIDs.add(selectedPackageID);
-  }
-
-  // Extra packages
   if (Array.isArray(client.extraPackages)) {
-    for (const pkgRaw of client.extraPackages) {
-      const pkgID = Number(pkgRaw);
+    for (const extraPkg of client.extraPackages) {
+      const pkgID = Number(extraPkg.packageId);
       if (pkgID) packageIDs.add(pkgID);
     }
   }
 
-  // 3️⃣ Insert into client_packages with package-level total quantity
+  // 4️⃣ Insert all packages & their products
   for (const pkgID of packageIDs) {
+    const extraPkg = (client.extraPackages || []).find(ep => Number(ep.packageId) === pkgID);
+
+    // Determine validFrom and validTo
+    let validFrom, validTo;
+    if (extraPkg) {
+      validFrom = new Date(`${extraPkg.startDate}T${extraPkg.startTime || "00:00:00"}`);
+      validTo = new Date(`${extraPkg.endDate}T${extraPkg.endTime || "23:59:59"}`);
+    } else {
+      validFrom = new Date(client.scheduleFrom);
+      validTo = new Date(client.scheduleTo);
+      validTo.setDate(validTo.getDate() - 1);
+    }
+
+    // Fetch package details
     const pkgRes = await pool.request()
       .input("packageID", sql.Int, pkgID)
       .query(`SELECT packageName, quantity AS packageQuantity FROM sg.LQ_CSS_fnb_packages WHERE packageID = @packageID`);
 
     const pkgName = pkgRes.recordset?.[0]?.packageName || "Unknown";
-    const totalQuantity = pkgRes.recordset?.[0]?.packageQuantity || 50; // package-level total
-    const remainingQty = totalQuantity;
+    const totalQuantity = pkgRes.recordset?.[0]?.packageQuantity || 50;
 
+    // Insert package
     await pool.request()
       .input("clientID", sql.Int, clientID)
       .input("packageID", sql.Int, pkgID)
       .input("packageName", sql.NVarChar(150), pkgName)
       .input("packageQuantity", sql.Int, totalQuantity)
-      .input("remainingQty", sql.Int, remainingQty)
+      .input("remainingQty", sql.Int, totalQuantity)
+      .input("validFrom", sql.DateTime, validFrom)
+      .input("validTo", sql.DateTime, validTo)
       .query(`
-        IF NOT EXISTS (SELECT 1 FROM sg.LQ_CSS_client_packages WHERE clientID = @clientID AND packageID = @packageID)
-          INSERT INTO sg.LQ_CSS_client_packages (clientID, packageID, packageName, quantity, remainingQty, createdAt)
-          VALUES (@clientID, @packageID, @packageName, @packageQuantity, @remainingQty, GETDATE());
+        INSERT INTO sg.LQ_CSS_client_packages
+          (clientID, packageID, packageName, quantity, remainingQty, validFrom, validTo, createdAt)
+        VALUES
+          (@clientID, @packageID, @packageName, @packageQuantity, @remainingQty, @validFrom, @validTo, GETDATE());
       `);
+
+    // 4a️⃣ Insert package items
+    const productsRes = await pool.request()
+      .input("packageID", sql.Int, pkgID)
+      .query(`SELECT productID, quantity FROM sg.LQ_CSS_fnb_package_items WHERE packageID = @packageID`);
+
+    for (const product of productsRes.recordset) {
+      await pool.request()
+        .input("clientID", sql.Int, clientID)
+        .input("packageID", sql.Int, pkgID)
+        .input("productID", sql.Int, product.productID)
+        .input("quantity", sql.Int, product.quantity)
+        .input("isDefault", sql.Bit, 1)
+        .query(`
+          INSERT INTO sg.LQ_CSS_client_package_items
+            (clientID, packageID, productID, quantity, isDefault, createdAt)
+          VALUES
+            (@clientID, @packageID, @productID, @quantity, @isDefault, GETDATE());
+        `);
+    }
   }
 
-  // 4️⃣ Generate QR + session
+  // 5️⃣ Generate QR + session
   const tokenQr = crypto.randomBytes(16).toString("hex");
   await pool.request()
     .input("clientID", sql.Int, clientID)
@@ -641,14 +696,15 @@ export const registerClientWithQR = async (client, userName) => {
     userName,
     pin,
     qrDataUrl,
-    expiresAt: new Date(Date.now() + 7*24*60*60*1000)
+    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
   });
 
-  // 5️⃣ Prepare package items for frontend
+  // 6️⃣ Prepare package items for frontend
   const pkgItemsRes = await pool.request()
     .input("clientID", sql.Int, clientID)
     .query(`
-      SELECT cpi.clientPackageItemID, cpi.productID, cpi.quantity AS productQuantity, p.productName, p.price, cpi.packageID
+      SELECT cpi.clientPackageItemID, cpi.productID, cpi.quantity AS productQuantity, 
+             p.productName, p.price, cpi.packageID
       FROM sg.LQ_CSS_client_package_items cpi
       LEFT JOIN sg.LQ_CSS_fnb_products p ON cpi.productID = p.productID
       WHERE cpi.clientID = @clientID
@@ -666,6 +722,7 @@ export const registerClientWithQR = async (client, userName) => {
     }
   };
 };
+ //working code with new registration
 
 // export const generateQrDataUrl = async (payload) => {
 //   if (!payload || !payload.clientID) throw new Error("clientID required for QR");
@@ -832,53 +889,210 @@ export const raiseBalance = async (clientID, amount, type = "package") => {
 
   return result.rowsAffected[0] > 0;
 };
+//
+// export const updateClient = async (client) => {
+//   if (!client.clientID) throw new Error("clientID is required for update");
+//   const pool = await poolPromise;
+//   const request = pool.request().input("clientID", sql.Int, client.clientID);
+
+//   const fieldsMap = {
+//     deceasedName: sql.NVarChar(150),
+//     registeredBy: sql.NVarChar(150),
+//     mobileNo: sql.NVarChar(20),
+//     email: sql.NVarChar(150),
+//     scheduleFrom: sql.DateTime,
+//     scheduleTo: sql.DateTime,
+//     chapelID: sql.Int,
+//     packageNo: sql.Int,
+//     pin: sql.NVarChar(10),
+//     packageBalance: sql.Decimal(18, 2),
+//     additionalBalance: sql.Decimal(18, 2),
+//     status: sql.NVarChar(50),
+//     contactPersonName: sql.NVarChar(150),
+//     contactPersonNumber: sql.NVarChar(50),
+//   };
+
+//   const fields = [];
+
+//   for (const [key, type] of Object.entries(fieldsMap)) {
+//     if (client[key] !== undefined) {
+//       if (key === "contactPersonNumber") {
+//         const phonePattern = /^(\d{2}-\d{4}-\d{4}|09\d{9})$/;
+//         if (!phonePattern.test(client[key])) {
+//           throw new Error("Invalid contactPersonNumber format");
+//         }
+//       }
+
+//       const value = type === sql.Decimal(18, 2) ? Number(client[key]) || 0 : client[key];
+//       fields.push(`${key} = @${key}`);
+//       request.input(key, type, value);
+//     }
+//   }
+
+//   if (fields.length === 0) throw new Error("No fields provided to update");
+//   fields.push("updatedAt = GETDATE()");
+
+//   const query = `UPDATE sg.LQ_CSS_client_info SET ${fields.join(", ")} WHERE clientID = @clientID`;
+//   const result = await request.query(query);
+//   return result.rowsAffected[0] > 0;
+// }; // old version of update only details
 
 export const updateClient = async (client) => {
   if (!client.clientID) throw new Error("clientID is required for update");
+
   const pool = await poolPromise;
-  const request = pool.request().input("clientID", sql.Int, client.clientID);
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
 
-  const fieldsMap = {
-    deceasedName: sql.NVarChar(150),
-    registeredBy: sql.NVarChar(150),
-    mobileNo: sql.NVarChar(20),
-    email: sql.NVarChar(150),
-    scheduleFrom: sql.DateTime,
-    scheduleTo: sql.DateTime,
-    chapelID: sql.Int,
-    packageNo: sql.Int,
-    pin: sql.NVarChar(10),
-    packageBalance: sql.Decimal(18, 2),
-    additionalBalance: sql.Decimal(18, 2),
-    status: sql.NVarChar(50),
-    contactPersonName: sql.NVarChar(150),
-    contactPersonNumber: sql.NVarChar(50),
-  };
+  try {
+    // 1️⃣ Update client info if needed
+    const fieldsMap = {
+      deceasedName: sql.NVarChar(150),
+      registeredBy: sql.NVarChar(150),
+      mobileNo: sql.NVarChar(20),
+      email: sql.NVarChar(150),
+      scheduleFrom: sql.DateTime,
+      scheduleTo: sql.DateTime,
+      chapelID: sql.Int,
+      packageNo: sql.Int,
+      pin: sql.NVarChar(10),
+      packageBalance: sql.Decimal(18, 2),
+      additionalBalance: sql.Decimal(18, 2),
+      status: sql.NVarChar(50),
+    };
 
-  const fields = [];
+    const fields = [];
+    const request = transaction.request().input("clientID", sql.Int, client.clientID);
 
-  for (const [key, type] of Object.entries(fieldsMap)) {
-    if (client[key] !== undefined) {
-      if (key === "contactPersonNumber") {
-        const phonePattern = /^(\d{2}-\d{4}-\d{4}|09\d{9})$/;
-        if (!phonePattern.test(client[key])) {
-          throw new Error("Invalid contactPersonNumber format");
+    for (const [key, type] of Object.entries(fieldsMap)) {
+      if (client[key] !== undefined) {
+        const value = type === sql.Decimal(18, 2) ? Number(client[key]) || 0 : client[key];
+        fields.push(`${key} = @${key}`);
+        request.input(key, type, value);
+      }
+    }
+
+    if (fields.length > 0) {
+      fields.push("updatedAt = GETDATE()");
+      await request.query(
+        `UPDATE sg.LQ_CSS_client_info SET ${fields.join(", ")} WHERE clientID = @clientID`
+      );
+    }
+
+    // 2️⃣ Update or add contact persons
+    if (Array.isArray(client.contactPersons)) {
+      for (const cp of client.contactPersons) {
+        if (!cp.name || !cp.number) continue;
+        await transaction.request()
+          .input("clientID", sql.Int, client.clientID)
+          .input("contactPersonName", sql.NVarChar(150), cp.name)
+          .input("contactPersonNumber", sql.NVarChar(50), cp.number)
+          .query(`
+            IF EXISTS (SELECT 1 FROM sg.LQ_CSS_client_contacts 
+                       WHERE clientID = @clientID AND contactPersonNumber = @contactPersonNumber)
+              UPDATE sg.LQ_CSS_client_contacts 
+              SET contactPersonName = @contactPersonName
+              WHERE clientID = @clientID AND contactPersonNumber = @contactPersonNumber
+            ELSE
+              INSERT INTO sg.LQ_CSS_client_contacts (clientID, contactPersonName, contactPersonNumber)
+              VALUES (@clientID, @contactPersonName, @contactPersonNumber)
+          `);
+      }
+    }
+
+    // 3️⃣ Update existing extra packages or add new
+    if (Array.isArray(client.extraPackages)) {
+      for (const pkg of client.extraPackages) {
+        const packageID = parseInt(pkg.packageID || pkg.packageId, 10);
+        if (isNaN(packageID)) continue;
+
+        const validFrom = pkg.startDate ? new Date(`${pkg.startDate}T${pkg.startTime || "00:00:00"}`) : client.scheduleFrom;
+        const validTo = pkg.endDate ? new Date(`${pkg.endDate}T${pkg.endTime || "23:59:59"}`) : client.scheduleTo;
+
+        if (pkg.clientPackageId) {
+          // Update existing package by clientPackageId
+          await transaction.request()
+            .input("clientPackageId", sql.Int, pkg.clientPackageId)
+            .input("validFrom", sql.DateTime, validFrom)
+            .input("validTo", sql.DateTime, validTo)
+            .query(`
+              UPDATE sg.LQ_CSS_client_packages
+              SET validFrom = @validFrom,
+                  validTo = @validTo,
+                  updatedAt = GETDATE()
+              WHERE clientPackageId = @clientPackageId
+            `);
+        } else {
+          // Insert new package
+          const pkgInfo = await transaction.request()
+            .input("packageID", sql.Int, packageID)
+            .query(`
+              SELECT TOP 1 packageID, packageName, description, totalValue, quantity
+              FROM sg.LQ_CSS_fnb_packages
+              WHERE packageID = @packageID
+            `);
+          const pkgData = pkgInfo.recordset[0];
+          if (!pkgData) continue;
+
+          // Determine extra count
+          const pkgCount = await transaction.request()
+            .input("clientId", sql.Int, client.clientID)
+            .input("packageID", sql.Int, packageID)
+            .query(`
+              SELECT COUNT(*) AS count
+              FROM sg.LQ_CSS_client_packages
+              WHERE clientId = @clientId AND packageID = @packageID
+            `);
+          const duplicateCount = pkgCount.recordset[0].count;
+          const packageName = duplicateCount > 0
+            ? `${pkgData.packageName} (Extra${duplicateCount > 1 ? " " + duplicateCount : ""})`
+            : pkgData.packageName;
+
+          await transaction.request()
+            .input("clientId", sql.Int, client.clientID)
+            .input("packageID", sql.Int, packageID)
+            .input("packageName", sql.NVarChar(150), packageName)
+            .input("description", sql.NVarChar(255), pkgData.description)
+            .input("totalValue", sql.Decimal(18, 2), pkgData.totalValue)
+            .input("quantity", sql.Int, pkgData.quantity)
+            .input("remainingQty", sql.Int, pkgData.quantity)
+            .input("validFrom", sql.DateTime, validFrom)
+            .input("validTo", sql.DateTime, validTo)
+            .query(`
+              INSERT INTO sg.LQ_CSS_client_packages (
+                clientId, packageID, packageName, description, totalValue, quantity, remainingQty,
+                validFrom, validTo, createdAt
+              ) VALUES (
+                @clientId, @packageID, @packageName, @description, @totalValue, @quantity,
+                @remainingQty, @validFrom, @validTo, GETDATE()
+              )
+            `);
         }
       }
-
-      const value = type === sql.Decimal(18, 2) ? Number(client[key]) || 0 : client[key];
-      fields.push(`${key} = @${key}`);
-      request.input(key, type, value);
     }
+
+    // 4️⃣ Remove packages if requested (by clientPackageId)
+    if (Array.isArray(client.removePackages)) {
+      for (let cpId of client.removePackages) {
+        cpId = parseInt(cpId, 10);
+        if (isNaN(cpId)) continue;
+        await transaction.request()
+          .input("clientPackageId", sql.Int, cpId)
+          .query(`
+            DELETE FROM sg.LQ_CSS_client_packages
+            WHERE clientPackageId = @clientPackageId
+          `);
+      }
+    }
+
+    await transaction.commit();
+    return true;
+  } catch (err) {
+    await transaction.rollback();
+    console.error("❌ UpdateClient Error:", err);
+    throw err;
   }
-
-  if (fields.length === 0) throw new Error("No fields provided to update");
-  fields.push("updatedAt = GETDATE()");
-
-  const query = `UPDATE sg.LQ_CSS_client_info SET ${fields.join(", ")} WHERE clientID = @clientID`;
-  const result = await request.query(query);
-  return result.rowsAffected[0] > 0;
-};
+}; // new version with add remove update
 
 export const deleteClient = async (clientID) => {
   const pool = await poolPromise;
