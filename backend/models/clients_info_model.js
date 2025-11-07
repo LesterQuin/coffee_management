@@ -190,14 +190,31 @@ export const getClientById = async (clientID) => {
 
 export const getClientPackageSummary = async (clientID) => {
   const pool = await poolPromise;
+
+  // 1️⃣ Fetch client info to know which package is the default one
+  const clientRes = await pool.request()
+    .input("clientID", sql.Int, clientID)
+    .query(`SELECT packageNo FROM sg.LQ_CSS_client_info WHERE clientID = @clientID`);
+
+  const defaultPackageID = clientRes.recordset?.[0]?.packageNo || null;
+
+  // 2️⃣ Fetch client packages
   const result = await pool.request()
     .input("clientID", sql.Int, clientID)
     .query(`
-      SELECT packageID, packageName, description, totalValue, quantity, remainingQty, validFrom, validTo
+      SELECT clientPackageId, packageID, packageName, description, totalValue, quantity, remainingQty, validFrom, validTo
       FROM sg.LQ_CSS_client_packages
       WHERE clientId = @clientID
     `);
-  return result.recordset;
+
+  // 3️⃣ Add flags (default vs extra)
+  const packages = result.recordset.map(pkg => ({
+    ...pkg,
+    isDefaultPackage: pkg.packageID === defaultPackageID
+    //isExtraPackage: pkg.packageID !== defaultPackageID
+  }));
+
+  return packages;
 };
 
 export const getClientContacts = async (clientID) => {
@@ -313,61 +330,73 @@ export const getClientPackageItems = async (clientID) => {
 //       packageSummary,
 //       products
 //     };
-// };
+// }; my old getsummary
 
 // Get client by clientSecret
 export const getClientWithPackageSummaryTest = async (clientID) => {
   const pool = await poolPromise;
-  const defaultPackage = await pool.request()
+
+  // Get all client packages (or top N)
+  const clientPackagesResult = await pool.request()
     .input("clientID", sql.Int, clientID)
-    .query(`SELECT [packageID]
-  FROM [DHUB].[sg].[LQ_CSS_client_packages] WHERE clientId = @clientID`);
-  const packageRecords = defaultPackage.recordset;
+    .query(`
+      SELECT 
+        clientPackageId,
+        packageID,
+        packageName,
+        description,
+        totalValue,
+        quantity,
+        remainingQty,
+        validFrom,
+        validTo
+      FROM [DHUB].[sg].[LQ_CSS_client_packages]
+      WHERE clientId = @clientID
+      ORDER BY createdAt ASC
+    `);
 
-  const firstPackageID = packageRecords[0]?.packageID || null;
-  const secondPackageID = packageRecords[1]?.packageID || null;
+  const clientPackages = clientPackagesResult.recordset;
+  if (!clientPackages.length) return null;
 
-  const packageDetailsResult = await pool.request()
-      .input("secondPackageID", sql.Int, secondPackageID)
-      .input("firstPackageID", sql.Int, firstPackageID)
-      .query(`
-        SELECT
-          MAX(CASE WHEN packageID = @firstPackageID THEN packageName END) AS packageName,
-          SUM(ISNULL(quantity, 0)) AS quantity,
-          MAX(CASE WHEN packageID = @firstPackageID THEN totalValue END) AS totalValue
-        FROM sg.LQ_CSS_fnb_packages
-        WHERE packageID IN (@secondPackageID, @firstPackageID);
-      `);
+  // Fetch products for all packages
+  const packageIDs = clientPackages.map(p => p.packageID);
 
-      const packageSummary = packageDetailsResult.recordset[0];
+  const productListResult = await pool.request()
+    .query(`
+      SELECT DISTINCT
+        i.packageID,
+        p.productID,
+        p.productName,
+        p.price,
+        p.sizeId,
+        s.size,
+        p.categoryID,
+        c.categoryName
+      FROM sg.LQ_CSS_fnb_package_items AS i
+      INNER JOIN sg.LQ_CSS_fnb_products AS p ON i.productID = p.productID
+      LEFT JOIN sg.LQ_CSS_product_sizes AS s ON p.sizeId = s.sizeId
+      LEFT JOIN sg.LQ_CSS_fnb_categories AS c ON p.categoryID = c.categoryID
+      WHERE i.packageID IN (${packageIDs.join(",")});
+    `);
 
-      const productListResult = await pool.request()
-      .input("secondPackageID", sql.Int, secondPackageID)
-      .input("firstPackageID", sql.Int, firstPackageID)
-      .query(`
-        SELECT DISTINCT
-          p.productID,
-          p.productName,
-          p.price,
-          p.sizeId,
-          s.size,
-          p.categoryID,
-          c.categoryName
-        FROM sg.LQ_CSS_fnb_package_items AS i
-        INNER JOIN sg.LQ_CSS_fnb_products AS p ON i.productID = p.productID
-        LEFT JOIN sg.LQ_CSS_product_sizes AS s ON p.sizeId = s.sizeId
-        LEFT JOIN sg.LQ_CSS_fnb_categories AS c ON p.categoryID = c.categoryID
-        WHERE i.packageID IN (@secondPackageID, @firstPackageID);
-      `);
+  const allProducts = productListResult.recordset;
 
-    const products = productListResult.recordset;
+  // Map products to their respective package
+  const packageSummary = clientPackages.map(pkg => ({
+    clientPackageId: pkg.clientPackageId,
+    packageID: pkg.packageID,
+    packageName: pkg.packageName,
+    description: pkg.description,
+    totalValue: pkg.totalValue,
+    qty: pkg.quantity,
+    remainingQty: pkg.remainingQty,
+    validFrom: pkg.validFrom,
+    validTo: pkg.validTo,
+    products: allProducts.filter(p => p.packageID === pkg.packageID)
+  }));
 
-    return {
-      packageSummary,
-      products
-    };
-
-}
+  return { packageSummary };
+};
 
 export const getClientBySecret = async (clientSecret) => {
   const pool = await poolPromise;
@@ -569,6 +598,18 @@ export const registerClientWithQR = async (client, userName) => {
   const pin = Math.floor(100000 + Math.random() * 900000).toString();
   const clientSecret = generateClientSecret();
 
+  function parseLocalDateTime(dateStr, timeStr) {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const [hour, minute, second] = timeStr.split(':').map(Number);
+    return new Date(year, month - 1, day, hour, minute, second);
+  }
+
+// Convert to local time before sending to SQL
+  function toLocalSQLDateTime(date) {
+    const tzOffset = date.getTimezoneOffset() * 60000; // convert min → ms
+    return new Date(date.getTime() - tzOffset);
+  }
+
   // 1️⃣ Insert client info
   const insertResult = await pool.request()
     .input("deceasedName", sql.NVarChar(150), client.deceasedName)
@@ -624,64 +665,88 @@ export const registerClientWithQR = async (client, userName) => {
   }
 
   // 4️⃣ Insert all packages & their products
-  for (const pkgID of packageIDs) {
-    const extraPkg = (client.extraPackages || []).find(ep => Number(ep.packageId) === pkgID);
+for (const pkgID of packageIDs) {
+  const extraPkg = (client.extraPackages || []).find(ep => Number(ep.packageId) === pkgID);
 
-    // Determine validFrom and validTo
-    let validFrom, validTo;
-    if (extraPkg) {
-      validFrom = new Date(`${extraPkg.startDate}T${extraPkg.startTime || "00:00:00"}`);
-      validTo = new Date(`${extraPkg.endDate}T${extraPkg.endTime || "23:59:59"}`);
-    } else {
-      validFrom = new Date(client.scheduleFrom);
-      validTo = new Date(client.scheduleTo);
-      validTo.setDate(validTo.getDate() - 1);
-    }
+  let validFrom, validTo;
 
-    // Fetch package details
-    const pkgRes = await pool.request()
-      .input("packageID", sql.Int, pkgID)
-      .query(`SELECT packageName, quantity AS packageQuantity FROM sg.LQ_CSS_fnb_packages WHERE packageID = @packageID`);
+  if (extraPkg) {
+    validFrom = parseLocalDateTime(extraPkg.startDate, extraPkg.startTime);
+    validTo   = parseLocalDateTime(extraPkg.endDate, extraPkg.endTime);
+  } else {
+    validFrom = new Date(client.scheduleFrom);
+    validTo   = new Date(client.scheduleTo);
+    validTo.setDate(validTo.getDate() - 1);
+  }
 
-    const pkgName = pkgRes.recordset?.[0]?.packageName || "Unknown";
-    const totalQuantity = pkgRes.recordset?.[0]?.packageQuantity || 50;
+  // Validation
+  const scheduleFrom = new Date(client.scheduleFrom);
+  const scheduleTo = new Date(client.scheduleTo);
 
-    // Insert package
+  if (validFrom < scheduleFrom){
+    throw new Error(
+      `Package ${pkgID} start date (${validFrom.toLocaleString()}) cannot be earlier that scheduleFrom (${scheduleFrom.toLocaleString()}).`
+    ); 
+  }
+  
+  if (validTo > scheduleTo) {
+    throw new Error(
+      `Package ${pkgID} end date (${validTo.toLocaleString()}) cannot be late than scheduleTo (${scheduleTo.toLocaleString()}).`
+    );   
+  }
+
+  // Convert to local before inserting into SQL
+  const localValidFrom = toLocalSQLDateTime(validFrom);
+  const localValidTo   = toLocalSQLDateTime(validTo);
+
+  // Fetch package detailsu
+  const pkgRes = await pool.request()
+    .input("packageID", sql.Int, pkgID)
+    .query(`
+      SELECT packageName, quantity AS packageQuantity
+      FROM sg.LQ_CSS_fnb_packages
+      WHERE packageID = @packageID
+    `);
+
+  const pkgName = pkgRes.recordset?.[0]?.packageName || "Unknown";
+  const totalQuantity = pkgRes.recordset?.[0]?.packageQuantity || 50;
+
+  // Insert package
+  await pool.request()
+    .input("clientID", sql.Int, clientID)
+    .input("packageID", sql.Int, pkgID)
+    .input("packageName", sql.NVarChar(150), pkgName)
+    .input("packageQuantity", sql.Int, totalQuantity)
+    .input("remainingQty", sql.Int, totalQuantity)
+    .input("validFrom", sql.DateTime2, localValidFrom)
+    .input("validTo", sql.DateTime2, localValidTo)
+    .query(`
+      INSERT INTO sg.LQ_CSS_client_packages
+        (clientID, packageID, packageName, quantity, remainingQty, validFrom, validTo, createdAt)
+      VALUES
+        (@clientID, @packageID, @packageName, @packageQuantity, @remainingQty, @validFrom, @validTo, GETDATE());
+    `);
+
+  // Insert package items
+  const productsRes = await pool.request()
+    .input("packageID", sql.Int, pkgID)
+    .query(`SELECT productID, quantity FROM sg.LQ_CSS_fnb_package_items WHERE packageID = @packageID`);
+
+  for (const product of productsRes.recordset) {
     await pool.request()
       .input("clientID", sql.Int, clientID)
       .input("packageID", sql.Int, pkgID)
-      .input("packageName", sql.NVarChar(150), pkgName)
-      .input("packageQuantity", sql.Int, totalQuantity)
-      .input("remainingQty", sql.Int, totalQuantity)
-      .input("validFrom", sql.DateTime, validFrom)
-      .input("validTo", sql.DateTime, validTo)
+      .input("productID", sql.Int, product.productID)
+      .input("quantity", sql.Int, product.quantity)
+      .input("isDefault", sql.Bit, 1)
       .query(`
-        INSERT INTO sg.LQ_CSS_client_packages
-          (clientID, packageID, packageName, quantity, remainingQty, validFrom, validTo, createdAt)
+        INSERT INTO sg.LQ_CSS_client_package_items
+          (clientID, packageID, productID, quantity, isDefault, createdAt)
         VALUES
-          (@clientID, @packageID, @packageName, @packageQuantity, @remainingQty, @validFrom, @validTo, GETDATE());
+          (@clientID, @packageID, @productID, @quantity, @isDefault, GETDATE());
       `);
-
-    // 4a️⃣ Insert package items
-    const productsRes = await pool.request()
-      .input("packageID", sql.Int, pkgID)
-      .query(`SELECT productID, quantity FROM sg.LQ_CSS_fnb_package_items WHERE packageID = @packageID`);
-
-    for (const product of productsRes.recordset) {
-      await pool.request()
-        .input("clientID", sql.Int, clientID)
-        .input("packageID", sql.Int, pkgID)
-        .input("productID", sql.Int, product.productID)
-        .input("quantity", sql.Int, product.quantity)
-        .input("isDefault", sql.Bit, 1)
-        .query(`
-          INSERT INTO sg.LQ_CSS_client_package_items
-            (clientID, packageID, productID, quantity, isDefault, createdAt)
-          VALUES
-            (@clientID, @packageID, @productID, @quantity, @isDefault, GETDATE());
-        `);
-    }
   }
+}
 
   // 5️⃣ Generate QR + session
   const tokenQr = crypto.randomBytes(16).toString("hex");
@@ -704,7 +769,7 @@ export const registerClientWithQR = async (client, userName) => {
     .input("clientID", sql.Int, clientID)
     .query(`
       SELECT cpi.clientPackageItemID, cpi.productID, cpi.quantity AS productQuantity, 
-             p.productName, p.price, cpi.packageID
+            p.productName, p.price, cpi.packageID
       FROM sg.LQ_CSS_client_package_items cpi
       LEFT JOIN sg.LQ_CSS_fnb_products p ON cpi.productID = p.productID
       WHERE cpi.clientID = @clientID
@@ -721,8 +786,7 @@ export const registerClientWithQR = async (client, userName) => {
       packageItems
     }
   };
-};
- //working code with new registration
+}; //working code with new registration
 
 // export const generateQrDataUrl = async (payload) => {
 //   if (!payload || !payload.clientID) throw new Error("clientID required for QR");
@@ -989,7 +1053,7 @@ export const updateClient = async (client) => {
           .input("contactPersonNumber", sql.NVarChar(50), cp.number)
           .query(`
             IF EXISTS (SELECT 1 FROM sg.LQ_CSS_client_contacts 
-                       WHERE clientID = @clientID AND contactPersonNumber = @contactPersonNumber)
+                      WHERE clientID = @clientID AND contactPersonNumber = @contactPersonNumber)
               UPDATE sg.LQ_CSS_client_contacts 
               SET contactPersonName = @contactPersonName
               WHERE clientID = @clientID AND contactPersonNumber = @contactPersonNumber
@@ -1001,75 +1065,102 @@ export const updateClient = async (client) => {
     }
 
     // 3️⃣ Update existing extra packages or add new
-    if (Array.isArray(client.extraPackages)) {
-      for (const pkg of client.extraPackages) {
-        const packageID = parseInt(pkg.packageID || pkg.packageId, 10);
-        if (isNaN(packageID)) continue;
+  if (Array.isArray(client.extraPackages)) {
+    // Helper functions
+    function parseLocalDateTime(dateStr, timeStr) {
+      if (!dateStr || !timeStr) return null;
 
-        const validFrom = pkg.startDate ? new Date(`${pkg.startDate}T${pkg.startTime || "00:00:00"}`) : client.scheduleFrom;
-        const validTo = pkg.endDate ? new Date(`${pkg.endDate}T${pkg.endTime || "23:59:59"}`) : client.scheduleTo;
+      // 🧩 Ensure time always has seconds (e.g., "08:00" → "08:00:00")
+      const normalizedTime =
+        timeStr.split(":").length === 2 ? `${timeStr}:00` : timeStr;
 
-        if (pkg.clientPackageId) {
-          // Update existing package by clientPackageId
-          await transaction.request()
-            .input("clientPackageId", sql.Int, pkg.clientPackageId)
-            .input("validFrom", sql.DateTime, validFrom)
-            .input("validTo", sql.DateTime, validTo)
-            .query(`
-              UPDATE sg.LQ_CSS_client_packages
-              SET validFrom = @validFrom,
-                  validTo = @validTo,
-                  updatedAt = GETDATE()
-              WHERE clientPackageId = @clientPackageId
-            `);
-        } else {
-          // Insert new package
-          const pkgInfo = await transaction.request()
-            .input("packageID", sql.Int, packageID)
-            .query(`
-              SELECT TOP 1 packageID, packageName, description, totalValue, quantity
-              FROM sg.LQ_CSS_fnb_packages
-              WHERE packageID = @packageID
-            `);
-          const pkgData = pkgInfo.recordset[0];
-          if (!pkgData) continue;
+      const [year, month, day] = dateStr.split("-").map(Number);
+      const [hour, minute, second] = normalizedTime.split(":").map(Number);
+      const d = new Date(year, month - 1, day, hour, minute, second);
+      return isNaN(d.getTime()) ? null : d;
+    }
 
-          // Determine extra count
-          const pkgCount = await transaction.request()
-            .input("clientId", sql.Int, client.clientID)
-            .input("packageID", sql.Int, packageID)
-            .query(`
-              SELECT COUNT(*) AS count
-              FROM sg.LQ_CSS_client_packages
-              WHERE clientId = @clientId AND packageID = @packageID
-            `);
-          const duplicateCount = pkgCount.recordset[0].count;
-          const packageName = duplicateCount > 0
-            ? `${pkgData.packageName} (Extra${duplicateCount > 1 ? " " + duplicateCount : ""})`
-            : pkgData.packageName;
+    function toLocalSQLDateTime(date) {
+      if (!date) return null;
+      const tzOffset = date.getTimezoneOffset() * 60000;
+      return new Date(date.getTime() - tzOffset);
+    }
 
-          await transaction.request()
-            .input("clientId", sql.Int, client.clientID)
-            .input("packageID", sql.Int, packageID)
-            .input("packageName", sql.NVarChar(150), packageName)
-            .input("description", sql.NVarChar(255), pkgData.description)
-            .input("totalValue", sql.Decimal(18, 2), pkgData.totalValue)
-            .input("quantity", sql.Int, pkgData.quantity)
-            .input("remainingQty", sql.Int, pkgData.quantity)
-            .input("validFrom", sql.DateTime, validFrom)
-            .input("validTo", sql.DateTime, validTo)
-            .query(`
-              INSERT INTO sg.LQ_CSS_client_packages (
-                clientId, packageID, packageName, description, totalValue, quantity, remainingQty,
-                validFrom, validTo, createdAt
-              ) VALUES (
-                @clientId, @packageID, @packageName, @description, @totalValue, @quantity,
-                @remainingQty, @validFrom, @validTo, GETDATE()
-              )
-            `);
-        }
+    for (const pkg of client.extraPackages) {
+      const packageID = parseInt(pkg.packageID || pkg.packageId, 10);
+      if (isNaN(packageID)) continue;
+
+      // ✅ Safe conversion (handles "08:00" or "08:00:00")
+      const fromParsed = parseLocalDateTime(pkg.startDate, pkg.startTime);
+      const toParsed = parseLocalDateTime(pkg.endDate, pkg.endTime);
+
+      const validFrom = fromParsed ? toLocalSQLDateTime(fromParsed) : client.scheduleFrom;
+      const validTo = toParsed ? toLocalSQLDateTime(toParsed) : client.scheduleTo;
+
+      if (!validFrom || !validTo || isNaN(validFrom) || isNaN(validTo)) {
+        console.warn(`⚠️ Skipped invalid date for packageID ${packageID}`);
+        continue;
+      }
+
+      if (pkg.clientPackageId) {
+        await transaction.request()
+          .input("clientPackageId", sql.Int, pkg.clientPackageId)
+          .input("validFrom", sql.DateTime, validFrom)
+          .input("validTo", sql.DateTime, validTo)
+          .query(`
+            UPDATE sg.LQ_CSS_client_packages
+            SET validFrom = @validFrom,
+                validTo = @validTo,
+                updatedAt = GETDATE()
+            WHERE clientPackageId = @clientPackageId
+          `);
+      } else {
+        const pkgInfo = await transaction.request()
+          .input("packageID", sql.Int, packageID)
+          .query(`
+            SELECT TOP 1 packageID, packageName, description, totalValue, quantity
+            FROM sg.LQ_CSS_fnb_packages
+            WHERE packageID = @packageID
+          `);
+        const pkgData = pkgInfo.recordset[0];
+        if (!pkgData) continue;
+
+        const pkgCount = await transaction.request()
+          .input("clientId", sql.Int, client.clientID)
+          .input("packageID", sql.Int, packageID)
+          .query(`
+            SELECT COUNT(*) AS count
+            FROM sg.LQ_CSS_client_packages
+            WHERE clientId = @clientId AND packageID = @packageID
+          `);
+
+        const duplicateCount = pkgCount.recordset[0].count;
+        const packageName = duplicateCount > 0
+          ? `${pkgData.packageName} (Extra${duplicateCount > 1 ? " " + duplicateCount : ""})`
+          : pkgData.packageName;
+
+        await transaction.request()
+          .input("clientId", sql.Int, client.clientID)
+          .input("packageID", sql.Int, packageID)
+          .input("packageName", sql.NVarChar(150), packageName)
+          .input("description", sql.NVarChar(255), pkgData.description)
+          .input("totalValue", sql.Decimal(18, 2), pkgData.totalValue)
+          .input("quantity", sql.Int, pkgData.quantity)
+          .input("remainingQty", sql.Int, pkgData.quantity)
+          .input("validFrom", sql.DateTime, validFrom)
+          .input("validTo", sql.DateTime, validTo)
+          .query(`
+            INSERT INTO sg.LQ_CSS_client_packages (
+              clientId, packageID, packageName, description, totalValue, quantity, remainingQty,
+              validFrom, validTo, createdAt
+            ) VALUES (
+              @clientId, @packageID, @packageName, @description, @totalValue, @quantity,
+              @remainingQty, @validFrom, @validTo, GETDATE()
+            )
+          `);
       }
     }
+  }
 
     // 4️⃣ Remove packages if requested (by clientPackageId)
     if (Array.isArray(client.removePackages)) {
