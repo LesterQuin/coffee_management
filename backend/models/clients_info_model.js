@@ -599,16 +599,38 @@ export const registerClientWithQR = async (client, userName) => {
   const clientSecret = generateClientSecret();
 
   function parseLocalDateTime(dateStr, timeStr) {
-    const [year, month, day] = dateStr.split('-').map(Number);
-    const [hour, minute, second] = timeStr.split(':').map(Number);
-    return new Date(year, month - 1, day, hour, minute, second);
-  }
+  if (!dateStr || !timeStr) return null;
+
+  // Ensure time always has seconds (e.g., "08:00" → "08:00:00")
+  const normalizedTime = timeStr.split(":").length === 2 ? `${timeStr}:00` : timeStr;
+
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const [hour, minute, second] = normalizedTime.split(":").map(Number);
+
+  const d = new Date(year, month - 1, day, hour, minute, second);
+  return isNaN(d.getTime()) ? null : d;
+}
 
 // Convert to local time before sending to SQL
   function toLocalSQLDateTime(date) {
-    const tzOffset = date.getTimezoneOffset() * 60000; // convert min → ms
-    return new Date(date.getTime() - tzOffset);
+  if (!date) return null;
+  const tzOffset = date.getTimezoneOffset() * 60000; // minutes → ms
+  return new Date(date.getTime() - tzOffset);
+}
+
+// Conver to SQL DateTime
+  function toLocalSQLDateTimeExact(date){
+    if (!date) return null;
+    return date;
   }
+
+// Adjust schedule to 12:01AM
+  const scheduleFromDate = new Date(client.scheduleFrom);
+  scheduleFromDate.setHours(0, 1, 0); // 12:01 AM
+
+// Adjust schedule to 11:59PM
+  const scheduleToDate = new Date(client.scheduleTo)
+  scheduleToDate.setHours(23, 59, 0); // 11:59 PM
 
   // 1️⃣ Insert client info
   const insertResult = await pool.request()
@@ -616,8 +638,8 @@ export const registerClientWithQR = async (client, userName) => {
     .input("registeredBy", sql.NVarChar(150), client.registeredBy)
     .input("mobileNo", sql.NVarChar(20), client.mobileNo)
     .input("email", sql.NVarChar(150), client.email ?? null)
-    .input("scheduleFrom", sql.DateTime, client.scheduleFrom)
-    .input("scheduleTo", sql.DateTime, client.scheduleTo)
+    .input("scheduleFrom", sql.DateTime, scheduleFromDate)
+    .input("scheduleTo", sql.DateTime, scheduleToDate)
     .input("chapelID", sql.Int, client.chapelID)
     .input("pin", sql.NVarChar(10), pin)
     .input("packageBalance", sql.Decimal(18, 2), client.packageBalance ?? 0)
@@ -683,33 +705,49 @@ for (const pkgID of packageIDs) {
   const scheduleFrom = new Date(client.scheduleFrom);
   const scheduleTo = new Date(client.scheduleTo);
 
-  if (validFrom < scheduleFrom){
+  if (!extraPkg) {
+  validFrom = new Date(client.scheduleFrom);
+  validFrom.setHours(0, 1, 0); // 12:01 AM
+
+  validTo = new Date(client.scheduleTo);
+  validTo.setHours(23, 59, 0); // 11:59 PM
+}
+
+  if (validFrom < scheduleFromDate){
     throw new Error(
       `Package ${pkgID} start date (${validFrom.toLocaleString()}) cannot be earlier that scheduleFrom (${scheduleFrom.toLocaleString()}).`
     ); 
   }
   
-  if (validTo > scheduleTo) {
+  if (validTo > scheduleToDate) {
     throw new Error(
       `Package ${pkgID} end date (${validTo.toLocaleString()}) cannot be late than scheduleTo (${scheduleTo.toLocaleString()}).`
     );   
   }
 
   // Convert to local before inserting into SQL
-  const localValidFrom = toLocalSQLDateTime(validFrom);
-  const localValidTo   = toLocalSQLDateTime(validTo);
+  // const localValidFrom = toLocalSQLDateTime(validFrom);
+  // const localValidTo   = toLocalSQLDateTime(validTo);
+
+  const localValidFrom = validFrom;
+  const localValidTo = validTo;
+
+  if (!localValidFrom || !localValidTo) {
+  throw new Error(`Invalid validFrom or validTo for package ${pkgID}`);
+}
 
   // Fetch package detailsu
   const pkgRes = await pool.request()
     .input("packageID", sql.Int, pkgID)
     .query(`
-      SELECT packageName, quantity AS packageQuantity
+      SELECT packageName, quantity AS packageQuantity, totalValue
       FROM sg.LQ_CSS_fnb_packages
       WHERE packageID = @packageID
     `);
 
   const pkgName = pkgRes.recordset?.[0]?.packageName || "Unknown";
   const totalQuantity = pkgRes.recordset?.[0]?.packageQuantity || 50;
+  const totalValue = pkgRes.recordset?.[0]?.totalValue || 0;
 
   // Insert package
   await pool.request()
@@ -718,13 +756,14 @@ for (const pkgID of packageIDs) {
     .input("packageName", sql.NVarChar(150), pkgName)
     .input("packageQuantity", sql.Int, totalQuantity)
     .input("remainingQty", sql.Int, totalQuantity)
+    .input("totalValue", sql.Decimal(18, 2), totalValue)
     .input("validFrom", sql.DateTime2, localValidFrom)
     .input("validTo", sql.DateTime2, localValidTo)
     .query(`
       INSERT INTO sg.LQ_CSS_client_packages
-        (clientID, packageID, packageName, quantity, remainingQty, validFrom, validTo, createdAt)
+        (clientID, packageID, packageName, quantity, remainingQty, totalValue, validFrom, validTo, createdAt)
       VALUES
-        (@clientID, @packageID, @packageName, @packageQuantity, @remainingQty, @validFrom, @validTo, GETDATE());
+        (@clientID, @packageID, @packageName, @packageQuantity, @remainingQty, @totalValue, @validFrom, @validTo, GETDATE());
     `);
 
   // Insert package items
