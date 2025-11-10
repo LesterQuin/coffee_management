@@ -53,7 +53,7 @@ export const getAllOrders = async (req, res) => {
 export const getOrderById = async (req, res) => {
   try {
     const { orderID } = req.params;
-    const order = await Model.getOrderByIdModel(orderID); // ✅ fixed reference
+    const order = await Model.getOrderByIdModel(orderID);
 
     if (!order) {
       return error(res, `No order found for ID ${orderID}`, 404);
@@ -66,7 +66,31 @@ export const getOrderById = async (req, res) => {
   }
 };
 
+export const getOrderStatusLogs = async (req, res) => {
+  try {
+    const { orderID, clientID } = req.query;
 
+    const logs = await Model.getOrderStatusLogs(orderID || null, clientID || null);
+
+    return success(res, logs, "Order status logs fetched successfully");
+  } catch (e) {
+    return error(res, e.message, 500);
+  }
+};
+
+export const getStatusBySession = async (req, res) => {
+  try{
+    const { sessionID } = req.params;
+
+    if (!sessionID) return error (res, "Missing required field: sessionID", 400);
+
+    const logs = await Model.getStatusBySession(sessionID);
+
+    return success(res, logs, `Order status logs fetched for session ${sessionID}`);
+  } catch (e){
+    return error(res, e.message, 500);
+  }
+};
 
 // ----------------------POST-------------------------
 // Place a new order

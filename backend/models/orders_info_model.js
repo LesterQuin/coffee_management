@@ -303,6 +303,62 @@ export const getOrderByIdModel = async (orderID) => {
   return order;
 };
 
+export const getOrderStatusLogs = async (orderID = null, clientID = null) => {
+  const pool = await poolPromise;
+  const request = pool.request();
+
+  if (orderID) request.input("orderID", sql.Int, orderID);
+  if (clientID) request.input("clientID", sql.Int, clientID);
+
+  const res = await request.query(`
+    SELECT 
+      log.logID, 
+      log.orderID, 
+      log.clientID, 
+      log.previousStatus, 
+      log.newStatus, 
+      log.changedBy, 
+      log.changedAt, 
+      log.timeSpentInPreviousStatus,
+      o.sessionID
+    FROM sg.LQ_CSS_fnb_order_status_log AS log
+    LEFT JOIN sg.LQ_CSS_fnb_orders AS o
+      ON log.orderID = o.orderID
+    WHERE ${orderID ? "log.orderID = @orderID" : "1=1"}
+      AND ${clientID ? "log.clientID = @clientID" : "1=1"}
+    ORDER BY log.changedAt DESC
+  `);
+
+  return res.recordset;
+};
+
+export const getStatusBySession = async (sessionID) => {
+  const pool = await poolPromise;
+  const request = pool.request();
+
+  request.input("sessionID", sql.Int, sessionID);
+
+  const res = await request.query(`
+    SELECT 
+        log.logID,
+        log.orderID,
+        log.clientID,
+        o.sessionID,
+        log.previousStatus,
+        log.newStatus,
+        log.changedBy,
+        log.changedAt,
+        log.timeSpentInPreviousStatus
+    FROM sg.LQ_CSS_fnb_order_status_log AS log
+    INNER JOIN sg.LQ_CSS_fnb_orders AS o
+      ON log.orderID = o.orderID
+    WHERE o.sessionID = @sessionID
+    ORDER BY log.changedAt DESC
+  `);
+
+  return res.recordset;
+}
+
 // ----------------------POST-------------------------
 // Place an order (optional, you can skip if using cart checkout)
 export const placeOrder = async (clientID = null, sessionID = null) => {
@@ -322,66 +378,60 @@ export const placeOrder = async (clientID = null, sessionID = null) => {
 
 // ----------------------PUT-------------------------
 // Update order status
-export const updateOrderStatus = async (orderID, status) => {
-  const pool = await poolPromise;
+// export const updateOrderStatus = async (orderID, status) => {
+//   const pool = await poolPromise;
 
-  // Step 1: Verify that the order has at least one item in category 3–6
-  const check = await pool.request()
-    .input("orderID", sql.Int, orderID)
-    .query(`
-      SELECT COUNT(*) AS count
-      FROM sg.LQ_CSS_fnb_order_items i
-      INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
-      WHERE i.orderID = @orderID
-        AND p.categoryID BETWEEN 3 AND 6
-    `);
+//   // Step 1: Verify that the order has at least one item in category 3–6
+//   const check = await pool.request()
+//     .input("orderID", sql.Int, orderID)
+//     .query(`
+//       SELECT COUNT(*) AS count
+//       FROM sg.LQ_CSS_fnb_order_items i
+//       INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
+//       WHERE i.orderID = @orderID
+//         AND p.categoryID BETWEEN 3 AND 6
+//     `);
 
-  if (check.recordset[0].count === 0) {
-    throw new Error("Order does not contain any products from categories 3–6.");
-  }
+//   if (check.recordset[0].count === 0) {
+//     throw new Error("Order does not contain any products from categories 3–6.");
+//   }
 
-  // Step 2: Update the order status if the check passed
-  const res = await pool.request()
-    .input("orderID", sql.Int, orderID)
-    .input("status", sql.NVarChar, status)
-    .query(`
-      UPDATE sg.LQ_CSS_fnb_orders
-      SET status = @status, updatedAt = GETDATE()
-      OUTPUT inserted.orderID,
-              inserted.clientID,
-              inserted.status,
-              inserted.createdAt,
-              inserted.updatedAt,
-              inserted.sessionID
-      WHERE orderID = @orderID
-    `);
+//   // Step 2: Update the order status if the check passed
+//   const res = await pool.request()
+//     .input("orderID", sql.Int, orderID)
+//     .input("status", sql.NVarChar, status)
+//     .query(`
+//       UPDATE sg.LQ_CSS_fnb_orders
+//       SET status = @status, updatedAt = GETDATE()
+//       OUTPUT inserted.orderID,
+//               inserted.clientID,
+//               inserted.status,
+//               inserted.createdAt,
+//               inserted.updatedAt,
+//               inserted.sessionID
+//       WHERE orderID = @orderID
+//     `);
 
-  return res.recordset?.[0];
-};
-
-export const cancelOrderBySession = async (orderID) => {
+//   return res.recordset?.[0];
+// };
+export const updateOrderStatus = async (orderID, status, changeBy = "System") => {
   const pool = await poolPromise;
   const transaction = new sql.Transaction(pool);
 
   try {
     await transaction.begin();
 
-    // Step 1: Check if order exists and is Pending
-    const check = await transaction.request()
+    // Step 0️⃣: Fetch current order
+    const orderRes = await transaction.request()
       .input("orderID", sql.Int, orderID)
-      .query(`
-        SELECT o.orderID, o.clientID, o.status
-        FROM sg.LQ_CSS_fnb_orders o
-        WHERE o.orderID = @orderID
-      `);
+      .query(`SELECT orderID, clientID, status, updatedAt FROM sg.LQ_CSS_fnb_orders WHERE orderID = @orderID`);
 
-    if (check.recordset.length === 0) throw new Error(`Order ${orderID} not found.`);
+    if (!orderRes.recordset.length) throw new Error(`Order ${orderID} not found`);
 
-    const { clientID, status: currentStatus } = check.recordset[0];
-    if (currentStatus !== "Pending") throw new Error(`Order ${orderID} cannot be cancelled — current status is '${currentStatus}'.`);
+    const { clientID, status: currentStatus, updatedAt } = orderRes.recordset[0];
 
-    // Step 2: Ensure order has at least one product in category 3–6
-    const hasAllowedCategory = await transaction.request()
+    // Step 1️⃣: Verify that the order has at least one item in category 3–6
+    const check = await transaction.request()
       .input("orderID", sql.Int, orderID)
       .query(`
         SELECT COUNT(*) AS count
@@ -391,74 +441,280 @@ export const cancelOrderBySession = async (orderID) => {
           AND p.categoryID BETWEEN 3 AND 6
       `);
 
-    if (hasAllowedCategory.recordset[0].count === 0) {
-      throw new Error(`Order ${orderID} cannot be cancelled — it has no items from categories 3–6.`);
+    if (check.recordset[0].count === 0) {
+      throw new Error("Order does not contain any products from categories 3–6.");
     }
 
-    // Step 3: Restore quantities for each order item
-    const itemsRes = await transaction.request()
+    // Step 2️⃣: If cancelling, restore package quantities
+    if (status === "Cancelled" && currentStatus !== "Cancelled") {
+      // Get all consumption log entries for this order
+      const logRes = await transaction.request()
+        .input("orderID", sql.Int, orderID)
+        .query(`
+          SELECT packageID, productID, quantity
+          FROM sg.LQ_CSS_client_consumption_log
+          WHERE orderID = @orderID AND consumedFrom = 'checkout'
+        `);
+
+      for (const logItem of logRes.recordset) {
+        const { packageID, productID, quantity } = logItem;
+
+        // Restore package remainingQty
+        await transaction.request()
+          .input("clientID", sql.Int, clientID)
+          .input("packageID", sql.Int, packageID)
+          .input("quantity", sql.Int, quantity)
+          .query(`
+            UPDATE sg.LQ_CSS_client_packages
+            SET remainingQty = remainingQty + @quantity
+            WHERE clientID = @clientID AND packageID = @packageID
+          `);
+
+        // Restore package item quantity
+        await transaction.request()
+          .input("clientID", sql.Int, clientID)
+          .input("packageID", sql.Int, packageID)
+          .input("productID", sql.Int, productID)
+          .input("quantity", sql.Int, quantity)
+          .query(`
+            UPDATE sg.LQ_CSS_client_package_items
+            SET quantity = quantity + @quantity
+            WHERE clientID = @clientID AND packageID = @packageID AND productID = @productID
+          `);
+
+        // Optional: log negative consumption
+        await transaction.request()
+          .input("clientID", sql.Int, clientID)
+          .input("packageID", sql.Int, packageID)
+          .input("productID", sql.Int, productID)
+          .input("quantity", sql.Int, quantity)
+          .query(`
+            INSERT INTO sg.LQ_CSS_client_consumption_log
+            (clientID, packageID, productID, quantity, consumedFrom, createdAt, orderID)
+            VALUES (@clientID, @packageID, @productID, -@quantity, 'cancelOrder', GETDATE(), @orderID)
+          `);
+      }
+    }
+
+    // Step 3️⃣: Update order status
+    const res = await transaction.request()
       .input("orderID", sql.Int, orderID)
+      .input("status", sql.NVarChar, status)
       .query(`
-        SELECT productID, quantity
-        FROM sg.LQ_CSS_fnb_order_items
+        UPDATE sg.LQ_CSS_fnb_orders
+        SET status = @status, updatedAt = GETDATE()
+        OUTPUT inserted.orderID,
+                inserted.clientID,
+                inserted.status,
+                inserted.createdAt,
+                inserted.updatedAt,
+                inserted.sessionID
         WHERE orderID = @orderID
       `);
 
-    for (const item of itemsRes.recordset) {
-      const { productID, quantity } = item;
+    const updatedOrder = res.recordset?.[0]
 
-      // Restore package items quantity
+    // Step 4️⃣: Log Status
+
+    const now = new Date();
+    const previousUpdate = new Date(updatedAt);
+    const timeSpentInPreviousStatus = Math.floor((now - previousUpdate) / 1000);
+
+    await transaction.request()
+      .input("orderID", sql.Int, orderID)
+      .input("clientID", sql.Int, clientID)
+      .input("previousStatus", sql.NVarChar, currentStatus)
+      .input("newStatus", sql.NVarChar, status)
+      .input("changedBy", sql.NVarChar, changeBy)
+      .input("changedAt", sql.DateTime, now)
+      .input("timeSpentInPreviousStatus", sql.Int, timeSpentInPreviousStatus)
+      .query(`
+        INSERT INTO sg.LQ_CSS_fnb_order_status_log
+          (orderID, clientID, previousStatus, newStatus, changedBy, changedAt, timeSpentInPreviousStatus)
+        VALUES (@orderID, @clientID, @previousStatus, @newStatus, @changedBy, @changedAt, @timeSpentInPreviousStatus)
+        `)
+
+    await transaction.commit();
+    return res.recordset?.[0];
+
+  } catch (err) {
+    await transaction.rollback();
+    throw new Error(err.message);
+  }
+};
+
+// Update order status
+// export const cancelOrderBySession = async (orderID) => {
+//   const pool = await poolPromise;
+//   const transaction = new sql.Transaction(pool);
+
+//   try {
+//     await transaction.begin();
+
+//     // Step 1: Check if order exists and is Pending
+//     const check = await transaction.request()
+//       .input("orderID", sql.Int, orderID)
+//       .query(`
+//         SELECT o.orderID, o.clientID, o.status
+//         FROM sg.LQ_CSS_fnb_orders o
+//         WHERE o.orderID = @orderID
+//       `);
+
+//     if (check.recordset.length === 0) throw new Error(`Order ${orderID} not found.`);
+
+//     const { clientID, status: currentStatus } = check.recordset[0];
+//     if (currentStatus !== "Pending") throw new Error(`Order ${orderID} cannot be cancelled — current status is '${currentStatus}'.`);
+
+//     // Step 2: Ensure order has at least one product in category 3–6
+//     const hasAllowedCategory = await transaction.request()
+//       .input("orderID", sql.Int, orderID)
+//       .query(`
+//         SELECT COUNT(*) AS count
+//         FROM sg.LQ_CSS_fnb_order_items i
+//         INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
+//         WHERE i.orderID = @orderID
+//           AND p.categoryID BETWEEN 3 AND 6
+//       `);
+
+//     if (hasAllowedCategory.recordset[0].count === 0) {
+//       throw new Error(`Order ${orderID} cannot be cancelled — it has no items from categories 3–6.`);
+//     }
+
+//     // Step 3: Restore quantities for each order item
+//     const itemsRes = await transaction.request()
+//       .input("orderID", sql.Int, orderID)
+//       .query(`
+//         SELECT productID, quantity
+//         FROM sg.LQ_CSS_fnb_order_items
+//         WHERE orderID = @orderID
+//       `);
+
+//     for (const item of itemsRes.recordset) {
+//       const { productID, quantity } = item;
+
+//       // Restore package items quantity
+//       await transaction.request()
+//         .input("clientID", sql.Int, clientID)
+//         .input("productID", sql.Int, productID)
+//         .input("quantity", sql.Int, quantity)
+//         .query(`
+//           UPDATE sg.LQ_CSS_client_package_items
+//           SET quantity = quantity + @quantity
+//           WHERE clientID = @clientID AND productID = @productID
+//         `);
+
+//       // Restore package summary remainingQty
+//       await transaction.request()
+//         .input("clientID", sql.Int, clientID)
+//         .input("productID", sql.Int, productID)
+//         .input("quantity", sql.Int, quantity)
+//         .query(`
+//           UPDATE sg.LQ_CSS_client_packages
+//           SET remainingQty = remainingQty + @quantity
+//           WHERE clientID = @clientID
+//             AND packageID IN (
+//               SELECT packageID
+//               FROM sg.LQ_CSS_client_package_items
+//               WHERE clientID = @clientID AND productID = @productID
+//             )
+//         `);
+
+//       // Optional: log negative consumption
+//       await transaction.request()
+//         .input("clientID", sql.Int, clientID)
+//         .input("productID", sql.Int, productID)
+//         .input("quantity", sql.Int, quantity)
+//         .query(`
+//           INSERT INTO sg.LQ_CSS_client_consumption_log
+//           (clientID, productID, quantity, consumedFrom, createdAt)
+//           VALUES (@clientID, @productID, -@quantity, 'cancelOrder', GETDATE())
+//         `);
+//     }
+
+//     // Step 4: Cancel the order
+//     const res = await transaction.request()
+//       .input("orderID", sql.Int, orderID)
+//       .query(`
+//         UPDATE sg.LQ_CSS_fnb_orders
+//         SET status = 'Cancelled',
+//             updatedAt = GETDATE()
+//         OUTPUT inserted.orderID, inserted.clientID, inserted.sessionID, inserted.status, inserted.updatedAt
+//         WHERE orderID = @orderID;
+//       `);
+
+//     await transaction.commit();
+//     return res.recordset?.[0] || null;
+
+//   } catch (err) {
+//     await transaction.rollback();
+//     throw new Error(err.message);
+//   }
+// };
+
+export const cancelOrderBySession = async (orderID) => {
+  const pool = await poolPromise;
+  const transaction = new sql.Transaction(pool);
+
+  try {
+    await transaction.begin();
+
+    // Step 1: Check order exists and status
+    const check = await transaction.request()
+      .input("orderID", sql.Int, orderID)
+      .query(`SELECT orderID, clientID, status FROM sg.LQ_CSS_fnb_orders WHERE orderID = @orderID`);
+
+    if (!check.recordset.length) throw new Error(`Order ${orderID} not found.`);
+    const { clientID, status: currentStatus } = check.recordset[0];
+    if (currentStatus !== "Pending") throw new Error(`Order cannot be cancelled — current status is '${currentStatus}'.`);
+
+    // Step 2: Get all consumed packages for this order
+    const logRes = await transaction.request()
+      .input("orderID", sql.Int, orderID)
+      .query(`
+        SELECT packageID, SUM(quantity) AS totalConsumed
+        FROM sg.LQ_CSS_client_consumption_log
+        WHERE orderID = @orderID AND consumedFrom = 'checkout'
+        GROUP BY packageID
+      `);
+
+    // Step 3: Restore package remainingQty
+    for (const pkg of logRes.recordset) {
       await transaction.request()
         .input("clientID", sql.Int, clientID)
-        .input("productID", sql.Int, productID)
-        .input("quantity", sql.Int, quantity)
-        .query(`
-          UPDATE sg.LQ_CSS_client_package_items
-          SET quantity = quantity + @quantity
-          WHERE clientID = @clientID AND productID = @productID
-        `);
-
-      // Restore package summary remainingQty
-      await transaction.request()
-        .input("clientID", sql.Int, clientID)
-        .input("productID", sql.Int, productID)
-        .input("quantity", sql.Int, quantity)
+        .input("packageID", sql.Int, pkg.packageID)
+        .input("quantity", sql.Int, pkg.totalConsumed)
         .query(`
           UPDATE sg.LQ_CSS_client_packages
           SET remainingQty = remainingQty + @quantity
-          WHERE clientID = @clientID
-            AND packageID IN (
-              SELECT packageID
-              FROM sg.LQ_CSS_client_package_items
-              WHERE clientID = @clientID AND productID = @productID
-            )
-        `);
-
-      // Optional: log negative consumption
-      await transaction.request()
-        .input("clientID", sql.Int, clientID)
-        .input("productID", sql.Int, productID)
-        .input("quantity", sql.Int, quantity)
-        .query(`
-          INSERT INTO sg.LQ_CSS_client_consumption_log
-          (clientID, productID, quantity, consumedFrom, createdAt)
-          VALUES (@clientID, @productID, -@quantity, 'cancelOrder', GETDATE())
+          WHERE clientID = @clientID AND packageID = @packageID
         `);
     }
 
-    // Step 4: Cancel the order
+    // Step 4: Optional: log negative consumption for audit
+    for (const pkg of logRes.recordset) {
+      await transaction.request()
+        .input("clientID", sql.Int, clientID)
+        .input("packageID", sql.Int, pkg.packageID)
+        .input("quantity", sql.Int, pkg.totalConsumed)
+        .query(`
+          INSERT INTO sg.LQ_CSS_client_consumption_log
+          (clientID, packageID, quantity, consumedFrom, createdAt, orderID)
+          VALUES (@clientID, @packageID, -@quantity, 'cancelOrder', GETDATE(), @orderID)
+        `);
+    }
+
+    // Step 5: Update order status
     const res = await transaction.request()
       .input("orderID", sql.Int, orderID)
       .query(`
         UPDATE sg.LQ_CSS_fnb_orders
-        SET status = 'Cancelled',
-            updatedAt = GETDATE()
-        OUTPUT inserted.orderID, inserted.clientID, inserted.sessionID, inserted.status, inserted.updatedAt
-        WHERE orderID = @orderID;
+        SET status = 'Cancelled', updatedAt = GETDATE()
+        OUTPUT inserted.*
+        WHERE orderID = @orderID
       `);
 
     await transaction.commit();
-    return res.recordset?.[0] || null;
+    return res.recordset?.[0];
 
   } catch (err) {
     await transaction.rollback();

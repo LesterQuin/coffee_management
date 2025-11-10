@@ -16,6 +16,10 @@ router.get("/", Controller.getOrders);
 router.get("/all", Controller.getAllOrders);
 // get order by orderID
 router.get("/order/:orderID", Controller.getOrderById);
+// Get order status logs (optionally by orderID or clientID)
+router.get("/status-logs", Controller.getOrderStatusLogs);
+// Get order by SessionID
+router.get("/:sessionID/status-logs", Controller.getStatusBySession);
 
 // ----------------------POST-------------------------
 // Order routes
