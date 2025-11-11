@@ -449,6 +449,40 @@ export const getClientByTokenQr = async (tokenQr) => {
     throw err;
   }
 };
+
+export const getClientProductSummaryModel = async (clientID) => {
+  const pool = await poolPromise;
+
+  const result = await pool.request()
+    .input("clientID", sql.Int, clientID)
+    .query(`
+      SELECT 
+        cpi.productID,
+        p.productName,
+        s.size,              
+        c.categoryName,     
+        SUM(cpi.quantity) AS totalQuantity
+      FROM sg.LQ_CSS_client_package_items AS cpi
+      JOIN sg.LQ_CSS_fnb_products AS p 
+        ON p.productID = cpi.productID
+      JOIN sg.LQ_CSS_product_sizes AS s 
+        ON s.sizeID = p.sizeID
+      JOIN sg.LQ_CSS_fnb_categories AS c 
+        ON c.categoryID = p.categoryID
+      WHERE cpi.clientID = @clientID
+      GROUP BY 
+        cpi.productID,
+        p.productName,
+        s.size,
+        c.categoryName
+      ORDER BY 
+        c.categoryName,
+        p.productName;
+    `);
+
+  return result.recordset;
+};
+
 // ---------------------- AUTH helpers -------------------------
 // get client auth fields needed for login/validation
 export const getClientAuthData = async (clientID) => {
@@ -611,26 +645,32 @@ export const registerClientWithQR = async (client, userName) => {
   return isNaN(d.getTime()) ? null : d;
 }
 
-// Convert to local time before sending to SQL
-  function toLocalSQLDateTime(date) {
-  if (!date) return null;
-  const tzOffset = date.getTimezoneOffset() * 60000; // minutes → ms
-  return new Date(date.getTime() - tzOffset);
-}
+// // Convert to local time before sending to SQL
+//   function toLocalSQLDateTime(date) {
+//   if (!date) return null;
+//   const tzOffset = date.getTimezoneOffset() * 60000; // minutes → ms
+//   return new Date(date.getTime() - tzOffset);
+// }
 
-// Conver to SQL DateTime
-  function toLocalSQLDateTimeExact(date){
-    if (!date) return null;
-    return date;
-  }
+// // Conver to SQL DateTime
+//   function toLocalSQLDateTimeExact(date){
+//     if (!date) return null;
+//     return date;
+//   }
 
 // Adjust schedule to 12:01AM
-  const scheduleFromDate = new Date(client.scheduleFrom);
+  
+  function toSQLDateExact(date) {
+    if (!date) return null;
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  }
+
+  const scheduleFromDate = toSQLDateExact(new Date(client.scheduleFrom));
   scheduleFromDate.setHours(0, 1, 0); // 12:01 AM
 
-// Adjust schedule to 11:59PM
-  const scheduleToDate = new Date(client.scheduleTo)
+  const scheduleToDate = toSQLDateExact(new Date(client.scheduleTo));
   scheduleToDate.setHours(23, 59, 0); // 11:59 PM
+
 
   // 1️⃣ Insert client info
   const insertResult = await pool.request()
@@ -696,22 +736,18 @@ for (const pkgID of packageIDs) {
     validFrom = parseLocalDateTime(extraPkg.startDate, extraPkg.startTime);
     validTo   = parseLocalDateTime(extraPkg.endDate, extraPkg.endTime);
   } else {
+    // Default package: subtract 1 day from scheduleTo
     validFrom = new Date(client.scheduleFrom);
-    validTo   = new Date(client.scheduleTo);
-    validTo.setDate(validTo.getDate() - 1);
+    validFrom.setHours(0, 1, 0); // 12:01 AM
+
+    validTo = new Date(client.scheduleTo);
+    validTo.setDate(validTo.getDate() - 1); // subtract 1 day
+    validTo.setHours(23, 59, 0); // 11:59 PM
   }
 
   // Validation
   const scheduleFrom = new Date(client.scheduleFrom);
   const scheduleTo = new Date(client.scheduleTo);
-
-  if (!extraPkg) {
-  validFrom = new Date(client.scheduleFrom);
-  validFrom.setHours(0, 1, 0); // 12:01 AM
-
-  validTo = new Date(client.scheduleTo);
-  validTo.setHours(23, 59, 0); // 11:59 PM
-}
 
   if (validFrom < scheduleFromDate){
     throw new Error(
@@ -726,17 +762,14 @@ for (const pkgID of packageIDs) {
   }
 
   // Convert to local before inserting into SQL
-  // const localValidFrom = toLocalSQLDateTime(validFrom);
-  // const localValidTo   = toLocalSQLDateTime(validTo);
-
-  const localValidFrom = validFrom;
-  const localValidTo = validTo;
+  const localValidFrom = toSQLDateExact(validFrom);
+  const localValidTo = toSQLDateExact(validTo);
 
   if (!localValidFrom || !localValidTo) {
-  throw new Error(`Invalid validFrom or validTo for package ${pkgID}`);
-}
+    throw new Error(`Invalid validFrom or validTo for package ${pkgID}`);
+  }
 
-  // Fetch package detailsu
+  // Fetch package details
   const pkgRes = await pool.request()
     .input("packageID", sql.Int, pkgID)
     .query(`
@@ -786,6 +819,7 @@ for (const pkgID of packageIDs) {
       `);
   }
 }
+
 
   // 5️⃣ Generate QR + session
   const tokenQr = crypto.randomBytes(16).toString("hex");
@@ -845,7 +879,6 @@ export const generateQrDataUrl = async (payload) => {
     width: 300 
   });
 };
-
 
 // ----------------------- Consume / Order logic (respects default validity) -----------------------
 export const consumeClientItem = async (clientID, productID, qty) => {
@@ -1231,4 +1264,3 @@ export const deleteClient = async (clientID) => {
   const result = await pool.request().input("clientID", sql.Int, clientID).query(`DELETE FROM sg.LQ_CSS_client_info WHERE clientID = @clientID`);
   return result.rowsAffected[0] > 0;
 };
-

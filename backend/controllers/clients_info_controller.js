@@ -466,3 +466,19 @@ export const assignDefaultPackageToClientController = async (req, res) => {
     return error(res, e.message || "Internal server error");
   }
 };
+
+export const getClientProductSummary = async (req, res) => {
+  try {
+    const clientID = parseInt(req.params.clientID, 10);
+    if (isNaN(clientID)) return error(res, "Invalid clientID", 400);
+
+    const summary = await Model.getClientProductSummaryModel(clientID);
+    if (!summary || summary.length === 0)
+      return error(res, "No product summary found for this client", 404);
+
+    return success(res, summary, "Client product summary loaded successfully");
+  } catch (e) {
+    console.error("❌ getClientProductSummary Error:", e);
+    return error(res, e.message || "Server error");
+  }
+};
