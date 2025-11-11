@@ -75,8 +75,8 @@ export const clientLogin = async (req, res) => {
     if (client.status !== "Active") return error(res, "Client inactive", 400);
 
     // Validate daily PIN
-    const todayPin = Clients.generateDailyPin(client.clientID);
-    if (pin !== todayPin) return error(res, "Invalid PIN", 400);
+    //const todayPin = Clients.generateDailyPin(client.clientID);
+    if (pin !== client.pin) return error(res, "Invalid PIN", 400);
 
     // Create new session (always create new one)
     const expiresAt = new Date(Date.now() + 6 * 60 * 60 * 1000); // expires in 6 hours
@@ -85,7 +85,7 @@ export const clientLogin = async (req, res) => {
     const sessionId = await Sessions.createSession({
       clientID: client.clientID,
       userName: userName || client.deceasedName || `client-${client.clientID}`,
-      pin: todayPin,
+      pin: client.pin,
       qrDataUrl,
       expiresAt
     });
