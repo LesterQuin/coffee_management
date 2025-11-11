@@ -158,11 +158,9 @@ export const addItems = async (clientID, items, sessionID) => {
   let cartID;
 
   if (sessionID) {
-    // Find cart by sessionID
     res = await pool.request()
       .input("sessionID", sql.Int, sessionID)
       .query("SELECT cartID FROM sg.LQ_CSS_fnb_cart WHERE sessionID = @sessionID");
-
     cartID = res.recordset[0]?.cartID;
 
     if (!cartID) {
@@ -173,11 +171,9 @@ export const addItems = async (clientID, items, sessionID) => {
       cartID = res.recordset[0].cartID;
     }
   } else {
-    // Fallback: find or create by clientID
     res = await pool.request()
       .input("clientID", sql.Int, clientID)
       .query("SELECT cartID FROM sg.LQ_CSS_fnb_cart WHERE clientID = @clientID");
-
     cartID = res.recordset[0]?.cartID;
 
     if (!cartID) {
@@ -190,14 +186,35 @@ export const addItems = async (clientID, items, sessionID) => {
 
   // Loop through items
   for (const item of items) {
-    const { productID, quantity, sizeId } = item; // <-- include sizeId
+    const { productID, quantity, sizeId } = item;
     if (!productID || !quantity) continue;
 
+    // Check that product exists
+    const productCheck = await pool.request()
+      .input("productID", sql.Int, productID)
+      .query("SELECT 1 FROM sg.LQ_CSS_fnb_products WHERE productID = @productID");
+
+    if (!productCheck.recordset.length) {
+      throw new Error(`Product ID ${productID} does not exist`);
+    }
+
+    // Check size if provided
+    if (sizeId) {
+      const sizeCheck = await pool.request()
+        .input("sizeId", sql.Int, sizeId)
+        .query("SELECT 1 FROM sg.LQ_CSS_product_sizes WHERE sizeId = @sizeId");
+
+      if (!sizeCheck.recordset.length) {
+        throw new Error(`Size ID ${sizeId} does not exist`);
+      }
+    }
+
+    // Insert or update cart item
     await pool.request()
       .input("cartID", sql.Int, cartID)
       .input("productID", sql.Int, productID)
       .input("quantity", sql.Int, quantity)
-      .input("sizeId", sql.Int, sizeId || null) // store sizeId
+      .input("sizeId", sql.Int, sizeId || null)
       .query(`
         IF EXISTS (SELECT 1 FROM sg.LQ_CSS_fnb_cart_items 
                    WHERE cartID = @cartID AND productID = @productID AND sizeId = @sizeId)
@@ -212,6 +229,7 @@ export const addItems = async (clientID, items, sessionID) => {
 
   return true;
 };
+
 
 // export const checkout = async (clientID = null, sessionID = null, staffID = null) => {
 //   const pool = await poolPromise;
@@ -529,7 +547,7 @@ export const addItems = async (clientID, items, sessionID) => {
 //   }
 // };
 
-export const checkout = async (clientID = null, sessionID = null, staffID = null) => {
+export const checkout = async (clientID = null, sessionID = null, staffID = null, productIDs = null) => {
   const pool = await poolPromise;
   const transaction = new sql.Transaction(pool);
 
@@ -544,7 +562,8 @@ export const checkout = async (clientID = null, sessionID = null, staffID = null
       clientID = clientRes.recordset[0]?.clientID || null;
     }
     if (!clientID) throw new Error("Cannot resolve clientID or sessionID");
-
+    const productIDsString = productIDs.map(id => parseInt(id, 10)).join(',');
+    
     // 2️⃣ Fetch cart items
     const cartRes = await transaction.request()
       .input("clientID", sql.Int, clientID)
@@ -554,6 +573,7 @@ export const checkout = async (clientID = null, sessionID = null, staffID = null
         FROM sg.LQ_CSS_fnb_cart_items i
         INNER JOIN sg.LQ_CSS_fnb_cart c ON i.cartID = c.cartID
         WHERE c.clientID = @clientID OR c.sessionID = @sessionID
+        AND i.productID IN (${productIDsString})
       `);
     const cartItems = cartRes.recordset;
     if (!cartItems.length) throw new Error("Cart is empty");
@@ -663,7 +683,6 @@ export const checkout = async (clientID = null, sessionID = null, staffID = null
     throw new Error(err.message);
   }
 };
-
 
 // ----------------------PUT-------------------------
 // Update item quantity in cart

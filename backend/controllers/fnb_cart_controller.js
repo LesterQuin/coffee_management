@@ -258,15 +258,19 @@ export const addItems = async (req, res) => {
 // };
 export const checkout = async (req, res) => {
   try {
-    const { clientID = null, sessionID = null } = req.body;
+    const { clientID = null, sessionID = null, productID = []} = req.body;
     const staffID = req.user?.staffID || null;
 
     if (!clientID && !sessionID) {
       return error(res, "Missing required fields: clientID or sessionID", 400);
     }
 
+    if (!Array.isArray(productID) || productID.length === 0) {
+      return error(res, "productID must be a non-empty array", 400);
+    }
+
     // Perform checkout
-    const receipt = await Model.checkout(clientID, sessionID, staffID);
+    const receipt = await Model.checkout(clientID, sessionID, staffID, productID);
 
     // If cart is empty, fetch items from the newly created order
     let itemsArray = [];
