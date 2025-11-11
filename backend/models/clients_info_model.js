@@ -483,6 +483,50 @@ export const getClientProductSummaryModel = async (clientID) => {
   return result.recordset;
 };
 
+export const getClientProductByDate = async (clientID, selectedDateTime) => {
+  const pool = await poolPromise;
+
+  if (!selectedDateTime) throw new Error("selectedDateTime is required");
+
+  // Convert incoming ISO string / Date to local time
+  const localDate = new Date(selectedDateTime);
+  const tzOffsetMs = localDate.getTimezoneOffset() * 60000;
+  const localDateTime = new Date(localDate.getTime() - tzOffsetMs);
+
+  const result = await pool.request()
+    .input("clientID", sql.Int, clientID)
+    .input("selectedDateTime", sql.DateTime2, localDateTime)
+    .query(`
+      SELECT DISTINCT
+          cpi.packageID,
+          cpi.productID,
+          p.productName,
+          p.price,
+          s.size,
+          p.categoryID,
+          c.categoryName,
+          cp.packageName,
+          cp.validFrom,
+          cp.validTo,
+          SUM(cpi.quantity) OVER(PARTITION BY cpi.packageID, cpi.productID) AS productQuantity
+      FROM sg.LQ_CSS_client_package_items cpi
+      INNER JOIN sg.LQ_CSS_client_packages cp
+          ON cpi.clientID = cp.clientID AND cpi.packageID = cp.packageID
+      LEFT JOIN sg.LQ_CSS_fnb_products p 
+          ON cpi.productID = p.productID
+      LEFT JOIN sg.LQ_CSS_product_sizes s 
+          ON p.sizeID = s.sizeId
+      LEFT JOIN sg.LQ_CSS_fnb_categories c 
+          ON p.categoryID = c.categoryID
+      WHERE cpi.clientID = @clientID
+        AND cp.validFrom <= @selectedDateTime
+        AND cp.validTo >= @selectedDateTime
+      ORDER BY cp.validFrom, cpi.productID;
+    `);
+
+  return result.recordset;
+};
+
 // ---------------------- AUTH helpers -------------------------
 // get client auth fields needed for login/validation
 export const getClientAuthData = async (clientID) => {
@@ -819,7 +863,6 @@ for (const pkgID of packageIDs) {
       `);
   }
 }
-
 
   // 5️⃣ Generate QR + session
   const tokenQr = crypto.randomBytes(16).toString("hex");

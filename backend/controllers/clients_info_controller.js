@@ -482,3 +482,26 @@ export const getClientProductSummary = async (req, res) => {
     return error(res, e.message || "Server error");
   }
 };
+
+// Get client products valid at a specific date/time
+export const getClientProductDate = async (req, res) => {
+  try {
+    const clientID = parseInt(req.params.clientID, 10);
+    if (isNaN(clientID)) return error(res, "Invalid clientID", 400);
+
+    // Use provided dateTime or default to current server time
+    const dateTimeStr = req.query.dateTime;
+    const dateTime = dateTimeStr ? new Date(dateTimeStr) : new Date();
+
+    if (isNaN(dateTime.getTime())) return error(res, "Invalid dateTime format", 400);
+
+    const products = await Model.getClientProductByDate(clientID, dateTime);
+    if (!products || products.length === 0)
+      return error(res, "No products found for this date/time", 404);
+
+    return success(res, products, "Client products fetched successfully");
+  } catch (e) {
+    console.error("❌ getClientProductDate Error:", e);
+    return error(res, e.message || "Server error");
+  }
+};

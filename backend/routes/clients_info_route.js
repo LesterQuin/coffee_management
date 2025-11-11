@@ -34,5 +34,8 @@ router.get("/:clientID/pin/today", staffAuth, Controller.getTodayPinForCashier);
 router.get("/:clientID/package/summary", Controller.getClientPackageSummaryController);
 // Get client all product summary
 router.get("/:clientID/product/summary", Controller.getClientProductSummary)
+// Get package product by date 
+router.get("/:clientID/product/date", Controller.getClientProductDate);
+
 
 export default router;
