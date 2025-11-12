@@ -162,9 +162,9 @@ export const getAllClient = async () => {
       c.registeredBy, 
       c.mobileNo, 
       c.email,
-      -- Adjust to Philippine Time (UTC+8)
-      CONVERT(varchar(19), DATEADD(HOUR, 8, c.schedule_from), 120) AS scheduleFrom,
-      CONVERT(varchar(19), DATEADD(HOUR, 8, c.schedule_to), 120) AS scheduleTo,
+      -- Use DB times as-is, no timezone adjustment
+      CONVERT(varchar(19), c.schedule_from, 120) AS scheduleFrom,
+      CONVERT(varchar(19), c.schedule_to, 120) AS scheduleTo,
       ISNULL(cr.chapelName,'No Chapel Assigned') AS chapelName,
       ISNULL(fp.packageName,'No Package Assigned') AS packageName,
       c.pin, 
@@ -346,7 +346,7 @@ export const getClientPackageItems = async (clientID) => {
 export const getClientWithPackageSummaryTest = async (clientID) => {
   const pool = await poolPromise;
 
-  // Get all client packages (or top N)
+  // Get all client packages
   const clientPackagesResult = await pool.request()
     .input("clientID", sql.Int, clientID)
     .query(`
@@ -370,7 +370,6 @@ export const getClientWithPackageSummaryTest = async (clientID) => {
 
   // Fetch products for all packages
   const packageIDs = clientPackages.map(p => p.packageID);
-
   const productListResult = await pool.request()
     .query(`
       SELECT DISTINCT
@@ -391,7 +390,7 @@ export const getClientWithPackageSummaryTest = async (clientID) => {
 
   const allProducts = productListResult.recordset;
 
-  // Map products to their respective package
+  // Map packages without changing their database times
   const packageSummary = clientPackages.map(pkg => ({
     clientPackageId: pkg.clientPackageId,
     packageID: pkg.packageID,
@@ -400,8 +399,8 @@ export const getClientWithPackageSummaryTest = async (clientID) => {
     totalValue: pkg.totalValue,
     qty: pkg.quantity,
     remainingQty: pkg.remainingQty,
-    validFrom: pkg.validFrom,
-    validTo: pkg.validTo,
+    validFrom: pkg.validFrom, // use DB time as-is
+    validTo: pkg.validTo,     // use DB time as-is
     products: allProducts.filter(p => p.packageID === pkg.packageID)
   }));
 
@@ -693,28 +692,12 @@ export const registerClientWithQR = async (client, userName) => {
   const pin = Math.floor(100000 + Math.random() * 900000).toString();
   const clientSecret = generateClientSecret();
 
-  function parseLocalDateTime(dateStr, timeStr) {
-  if (!dateStr || !timeStr) return null;
+  // ✅ Use string dates to avoid timezone conversion
+  const scheduleFromStr = `${client.scheduleFrom} 00:01:00`;
+  const scheduleToStr   = `${client.scheduleTo} 23:59:00`;
 
-  // Ensure time always has seconds (e.g., "08:00" → "08:00:00")
-  const normalizedTime = timeStr.split(":").length === 2 ? `${timeStr}:00` : timeStr;
-
-  const [year, month, day] = dateStr.split("-").map(Number);
-  const [hour, minute, second] = normalizedTime.split(":").map(Number);
-
-  const d = new Date(year, month - 1, day, hour, minute, second);
-  return isNaN(d.getTime()) ? null : d;
-}  
-  function toSQLDateExact(date) {
-    if (!date) return null;
-    return new Date(date.getTime() - date.getTimezoneOffset() * 60000);
-  }
-
-  const scheduleFromDate = toSQLDateExact(new Date(client.scheduleFrom));
-  scheduleFromDate.setHours(0, 1, 0); // 12:01 AM
-
-  const scheduleToDate = toSQLDateExact(new Date(client.scheduleTo));
-  scheduleToDate.setHours(23, 59, 0); // 11:59 PM
+  console.log("scheduleFromStr:", scheduleFromStr);
+  console.log("scheduleToStr:", scheduleToStr);
 
   // 1️⃣ Insert client info
   const insertResult = await pool.request()
@@ -722,8 +705,8 @@ export const registerClientWithQR = async (client, userName) => {
     .input("registeredBy", sql.NVarChar(150), client.registeredBy)
     .input("mobileNo", sql.NVarChar(20), client.mobileNo)
     .input("email", sql.NVarChar(150), client.email ?? null)
-    .input("scheduleFrom", sql.DateTime, scheduleFromDate)
-    .input("scheduleTo", sql.DateTime, scheduleToDate)
+    .input("scheduleFrom", sql.NVarChar, scheduleFromStr)
+    .input("scheduleTo", sql.NVarChar, scheduleToStr)
     .input("chapelID", sql.Int, client.chapelID)
     .input("pin", sql.NVarChar(10), pin)
     .input("packageBalance", sql.Decimal(18, 2), client.packageBalance ?? 0)
@@ -734,15 +717,16 @@ export const registerClientWithQR = async (client, userName) => {
         (deceasedName, registeredBy, mobileNo, email, schedule_from, schedule_to, chapelID, pin,
         packageBalance, additionalBalance, clientSecret, status, createdAt, updatedAt)
       VALUES
-        (@deceasedName, @registeredBy, @mobileNo, @email, @scheduleFrom, @scheduleTo, @chapelID,
-        @pin, @packageBalance, @additionalBalance, @clientSecret, 'Active', GETDATE(), GETDATE());
+        (@deceasedName, @registeredBy, @mobileNo, @email,
+         CAST(@scheduleFrom AS DATETIME), CAST(@scheduleTo AS DATETIME),
+         @chapelID, @pin, @packageBalance, @additionalBalance, @clientSecret, 'Active', GETDATE(), GETDATE());
       SELECT SCOPE_IDENTITY() AS clientID;
     `);
 
   const clientID = insertResult.recordset?.[0]?.clientID;
   if (!clientID) throw new Error("Failed to register client");
 
-  // 2️⃣ Insert multiple contact persons
+  // 2️⃣ Insert contact persons
   if (Array.isArray(client.contactPersons)) {
     for (const cp of client.contactPersons) {
       if (!cp.name || !cp.number) continue;
@@ -758,7 +742,7 @@ export const registerClientWithQR = async (client, userName) => {
     }
   }
 
-  // 3️⃣ Collect package IDs (default + extraPackages)
+  // 3️⃣ Collect package IDs
   const packageIDs = new Set();
   const defaultPackageID = await assignDefaultPackageToClient(clientID);
   if (defaultPackageID) packageIDs.add(defaultPackageID);
@@ -770,109 +754,76 @@ export const registerClientWithQR = async (client, userName) => {
     }
   }
 
-  // 4️⃣ Insert all packages & their products
-for (const pkgID of packageIDs) {
-  const extraPkg = (client.extraPackages || []).find(ep => Number(ep.packageId) === pkgID);
+  // 4️⃣ Insert packages & items
+  for (const pkgID of packageIDs) {
+    const extraPkg = (client.extraPackages || []).find(ep => Number(ep.packageId) === pkgID);
 
-  let validFrom, validTo;
+    let validFromStr, validToStr;
 
-  if (extraPkg) {
-    validFrom = parseLocalDateTime(extraPkg.startDate, extraPkg.startTime);
-    validTo   = parseLocalDateTime(extraPkg.endDate, extraPkg.endTime);
-  } else {
-    // Default package: one day before scheduleTo (unless same day)
-    validFrom = new Date(client.scheduleFrom);
-    validFrom.setHours(0, 1, 0); // 12:01 AM start
-
-    validTo = new Date(client.scheduleTo);
-
-    // Check if scheduleFrom and scheduleTo are the same calendar day
-    const isSameDay =
-      validFrom.getFullYear() === validTo.getFullYear() &&
-      validFrom.getMonth() === validTo.getMonth() &&
-      validFrom.getDate() === validTo.getDate();
-
-    if (!isSameDay) {
-      validTo.setDate(validTo.getDate() - 1); // subtract 1 day only if multi-day schedule
+    if (extraPkg) {
+      // Extra packages keep exact dates/times
+      validFromStr = `${extraPkg.startDate} ${extraPkg.startTime}:00`;
+      validToStr   = `${extraPkg.endDate} ${extraPkg.endTime}:00`;
+    } else {
+      // Default package: start = scheduleFrom, end = scheduleTo minus 1 day
+      validFromStr = scheduleFromStr;
+      const scheduleToDateObj = new Date(`${client.scheduleTo} 23:59:00`);
+scheduleToDateObj.setDate(scheduleToDateObj.getDate() - 1);
+const pad = n => n.toString().padStart(2,'0');
+validToStr = `${scheduleToDateObj.getFullYear()}-${pad(scheduleToDateObj.getMonth()+1)}-${pad(scheduleToDateObj.getDate())} ${pad(scheduleToDateObj.getHours())}:${pad(scheduleToDateObj.getMinutes())}:${pad(scheduleToDateObj.getSeconds())}`;
     }
 
-    validTo.setHours(23, 59, 0); // 11:59 PM end
-  }
+    // Fetch package details
+    const pkgRes = await pool.request()
+      .input("packageID", sql.Int, pkgID)
+      .query(`
+        SELECT packageName, quantity AS packageQuantity, totalValue
+        FROM sg.LQ_CSS_fnb_packages
+        WHERE packageID = @packageID
+      `);
 
-  // Validation
-  const scheduleFrom = new Date(client.scheduleFrom);
-  const scheduleTo = new Date(client.scheduleTo);
+    const pkgName = pkgRes.recordset?.[0]?.packageName || "Unknown";
+    const totalQuantity = pkgRes.recordset?.[0]?.packageQuantity || 50;
+    const totalValue = pkgRes.recordset?.[0]?.totalValue || 0;
 
-  if (validFrom < scheduleFromDate){
-    throw new Error(
-      `Package ${pkgID} start date (${validFrom.toLocaleString()}) cannot be earlier that scheduleFrom (${scheduleFrom.toLocaleString()}).`
-    ); 
-  }
-  
-  if (validTo > scheduleToDate) {
-    throw new Error(
-      `Package ${pkgID} end date (${validTo.toLocaleString()}) cannot be late than scheduleTo (${scheduleTo.toLocaleString()}).`
-    );   
-  }
-
-  // Convert to local before inserting into SQL
-  const localValidFrom = toSQLDateExact(validFrom);
-  const localValidTo = toSQLDateExact(validTo);
-
-  if (!localValidFrom || !localValidTo) {
-    throw new Error(`Invalid validFrom or validTo for package ${pkgID}`);
-  }
-
-  // Fetch package details
-  const pkgRes = await pool.request()
-    .input("packageID", sql.Int, pkgID)
-    .query(`
-      SELECT packageName, quantity AS packageQuantity, totalValue
-      FROM sg.LQ_CSS_fnb_packages
-      WHERE packageID = @packageID
-    `);
-
-  const pkgName = pkgRes.recordset?.[0]?.packageName || "Unknown";
-  const totalQuantity = pkgRes.recordset?.[0]?.packageQuantity || 50;
-  const totalValue = pkgRes.recordset?.[0]?.totalValue || 0;
-
-  // Insert package
-  await pool.request()
-    .input("clientID", sql.Int, clientID)
-    .input("packageID", sql.Int, pkgID)
-    .input("packageName", sql.NVarChar(150), pkgName)
-    .input("packageQuantity", sql.Int, totalQuantity)
-    .input("remainingQty", sql.Int, totalQuantity)
-    .input("totalValue", sql.Decimal(18, 2), totalValue)
-    .input("validFrom", sql.DateTime2, localValidFrom)
-    .input("validTo", sql.DateTime2, localValidTo)
-    .query(`
-      INSERT INTO sg.LQ_CSS_client_packages
-        (clientID, packageID, packageName, quantity, remainingQty, totalValue, validFrom, validTo, createdAt)
-      VALUES
-        (@clientID, @packageID, @packageName, @packageQuantity, @remainingQty, @totalValue, @validFrom, @validTo, GETDATE());
-    `);
-
-  // Insert package items
-  const productsRes = await pool.request()
-    .input("packageID", sql.Int, pkgID)
-    .query(`SELECT productID, quantity FROM sg.LQ_CSS_fnb_package_items WHERE packageID = @packageID`);
-
-  for (const product of productsRes.recordset) {
+    // Insert package
     await pool.request()
       .input("clientID", sql.Int, clientID)
       .input("packageID", sql.Int, pkgID)
-      .input("productID", sql.Int, product.productID)
-      .input("quantity", sql.Int, product.quantity)
-      .input("isDefault", sql.Bit, 1)
+      .input("packageName", sql.NVarChar(150), pkgName)
+      .input("packageQuantity", sql.Int, totalQuantity)
+      .input("remainingQty", sql.Int, totalQuantity)
+      .input("totalValue", sql.Decimal(18, 2), totalValue)
+      .input("validFrom", sql.NVarChar, validFromStr)
+      .input("validTo", sql.NVarChar, validToStr)
       .query(`
-        INSERT INTO sg.LQ_CSS_client_package_items
-          (clientID, packageID, productID, quantity, isDefault, createdAt)
+        INSERT INTO sg.LQ_CSS_client_packages
+          (clientID, packageID, packageName, quantity, remainingQty, totalValue, validFrom, validTo, createdAt)
         VALUES
-          (@clientID, @packageID, @productID, @quantity, @isDefault, GETDATE());
+          (@clientID, @packageID, @packageName, @packageQuantity, @remainingQty, @totalValue,
+           CAST(@validFrom AS DATETIME), CAST(@validTo AS DATETIME), GETDATE());
       `);
+
+    // Insert package items
+    const productsRes = await pool.request()
+      .input("packageID", sql.Int, pkgID)
+      .query(`SELECT productID, quantity FROM sg.LQ_CSS_fnb_package_items WHERE packageID = @packageID`);
+
+    for (const product of productsRes.recordset) {
+      await pool.request()
+        .input("clientID", sql.Int, clientID)
+        .input("packageID", sql.Int, pkgID)
+        .input("productID", sql.Int, product.productID)
+        .input("quantity", sql.Int, product.quantity)
+        .input("isDefault", sql.Bit, 1)
+        .query(`
+          INSERT INTO sg.LQ_CSS_client_package_items
+            (clientID, packageID, productID, quantity, isDefault, createdAt)
+          VALUES
+            (@clientID, @packageID, @productID, @quantity, @isDefault, GETDATE());
+        `);
+    }
   }
-}
 
   // 5️⃣ Generate QR + session
   const tokenQr = crypto.randomBytes(16).toString("hex");
