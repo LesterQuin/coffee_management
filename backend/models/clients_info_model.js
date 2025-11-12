@@ -497,31 +497,38 @@ export const getClientProductByDate = async (clientID, selectedDateTime) => {
     .input("clientID", sql.Int, clientID)
     .input("selectedDateTime", sql.DateTime2, localDateTime)
     .query(`
-      SELECT DISTINCT
-          cpi.packageID,
-          cpi.productID,
-          p.productName,
-          p.price,
-          s.size,
-          p.categoryID,
-          c.categoryName,
-          cp.packageName,
-          cp.validFrom,
-          cp.validTo,
-          SUM(cpi.quantity) OVER(PARTITION BY cpi.packageID, cpi.productID) AS productQuantity
-      FROM sg.LQ_CSS_client_package_items cpi
-      INNER JOIN sg.LQ_CSS_client_packages cp
-          ON cpi.clientID = cp.clientID AND cpi.packageID = cp.packageID
-      LEFT JOIN sg.LQ_CSS_fnb_products p 
-          ON cpi.productID = p.productID
-      LEFT JOIN sg.LQ_CSS_product_sizes s 
-          ON p.sizeID = s.sizeId
-      LEFT JOIN sg.LQ_CSS_fnb_categories c 
-          ON p.categoryID = c.categoryID
-      WHERE cpi.clientID = @clientID
-        AND cp.validFrom <= @selectedDateTime
-        AND cp.validTo >= @selectedDateTime
-      ORDER BY cp.validFrom, cpi.productID;
+      SELECT
+        MIN(cp.packageID) AS packageID, -- take one packageID arbitrarily
+        cpi.productID,
+        p.productName,
+        p.price,
+        s.size,
+        p.categoryID,
+        c.categoryName,
+        MIN(cp.packageName) AS packageName, -- take one package name
+        MIN(cp.validFrom) AS validFrom,
+        MAX(cp.validTo) AS validTo,
+        SUM(cpi.quantity) AS productQuantity
+    FROM sg.LQ_CSS_client_package_items cpi
+    INNER JOIN sg.LQ_CSS_client_packages cp
+        ON cpi.clientID = cp.clientID AND cpi.packageID = cp.packageID
+    LEFT JOIN sg.LQ_CSS_fnb_products p 
+        ON cpi.productID = p.productID
+    LEFT JOIN sg.LQ_CSS_product_sizes s 
+        ON p.sizeID = s.sizeId
+    LEFT JOIN sg.LQ_CSS_fnb_categories c 
+        ON p.categoryID = c.categoryID
+    WHERE cpi.clientID = @clientID
+      AND cp.validFrom <= @selectedDateTime
+      AND cp.validTo >= @selectedDateTime
+    GROUP BY
+        cpi.productID,
+        p.productName,
+        p.price,
+        s.size,
+        p.categoryID,
+        c.categoryName
+    ORDER BY cpi.productID;
     `);
 
   return result.recordset;
@@ -687,23 +694,7 @@ export const registerClientWithQR = async (client, userName) => {
 
   const d = new Date(year, month - 1, day, hour, minute, second);
   return isNaN(d.getTime()) ? null : d;
-}
-
-// // Convert to local time before sending to SQL
-//   function toLocalSQLDateTime(date) {
-//   if (!date) return null;
-//   const tzOffset = date.getTimezoneOffset() * 60000; // minutes → ms
-//   return new Date(date.getTime() - tzOffset);
-// }
-
-// // Conver to SQL DateTime
-//   function toLocalSQLDateTimeExact(date){
-//     if (!date) return null;
-//     return date;
-//   }
-
-// Adjust schedule to 12:01AM
-  
+}  
   function toSQLDateExact(date) {
     if (!date) return null;
     return new Date(date.getTime() - date.getTimezoneOffset() * 60000);
@@ -714,7 +705,6 @@ export const registerClientWithQR = async (client, userName) => {
 
   const scheduleToDate = toSQLDateExact(new Date(client.scheduleTo));
   scheduleToDate.setHours(23, 59, 0); // 11:59 PM
-
 
   // 1️⃣ Insert client info
   const insertResult = await pool.request()
