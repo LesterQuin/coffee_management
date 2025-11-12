@@ -24,7 +24,7 @@ router.put("/:clientID", staffAuth, Controller.update);
 router.put("/:clientID/balance", staffAuth, Controller.raiseBalance);
 // ----------------------DELETE-------------------------
 // Delete client by ID
-router.delete("/:clientID", staffAuth, Controller.deleteClient);
+router.delete("/:clientID", Controller.deleteClient);
 // ----------------------Summary-------------------------
 // Client dashboard with package items & summary
 router.get("/:clientID/dashboard", staffAuth, Controller.getClientDashboard);

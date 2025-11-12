@@ -435,22 +435,21 @@ export const updateOrderStatus = async (orderID, status, changeBy = "System") =>
     const { clientID, status: currentStatus, updatedAt } = orderRes.recordset[0];
     console.log("Fetched order:", orderRes.recordset[0]);
 
-    // Step 1️⃣: Verify that the order has at least one item in category 3–6
+    // Step 1️⃣: Verify order has at least one product in category 3–6
     const check = await transaction.request()
       .input("orderID", sql.Int, orderID)
       .query(`
         SELECT COUNT(*) AS count
         FROM sg.LQ_CSS_fnb_order_items i
         INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
-        WHERE i.orderID = @orderID
-          AND p.categoryID BETWEEN 3 AND 6
+        WHERE i.orderID = @orderID AND p.categoryID BETWEEN 3 AND 6
       `);
 
     if (check.recordset[0].count === 0) {
       console.warn(`Order ${orderID} has no products in categories 3–6. Skipping category check.`);
     }
 
-    // Step 2️⃣: If cancelling, restore package quantities using order items
+    // Step 2️⃣: If cancelling, restore package quantities
     if (status.toLowerCase() === "cancelled" && currentStatus.toLowerCase() !== "cancelled") {
       const itemsRes = await transaction.request()
         .input("orderID", sql.Int, orderID)
@@ -463,54 +462,48 @@ export const updateOrderStatus = async (orderID, status, changeBy = "System") =>
       for (const item of itemsRes.recordset) {
         const { productID, quantity } = item;
 
-        try {
-          // Restore package items quantity
-          await transaction.request()
-            .input("clientID", sql.Int, clientID)
-            .input("productID", sql.Int, productID)
-            .input("quantity", sql.Int, quantity)
-            .query(`
-              UPDATE sg.LQ_CSS_client_package_items
-              SET quantity = quantity + @quantity
-              WHERE clientID = @clientID AND productID = @productID
-            `);
+        // Restore package items quantity
+        await transaction.request()
+          .input("clientID", sql.Int, clientID)
+          .input("productID", sql.Int, productID)
+          .input("quantity", sql.Int, quantity)
+          .query(`
+            UPDATE sg.LQ_CSS_client_package_items
+            SET quantity = quantity + @quantity
+            WHERE clientID = @clientID AND productID = @productID
+          `);
 
-          // Restore package summary remainingQty
-          await transaction.request()
-            .input("clientID", sql.Int, clientID)
-            .input("productID", sql.Int, productID)
-            .input("quantity", sql.Int, quantity)
-            .query(`
-              UPDATE sg.LQ_CSS_client_packages
-              SET remainingQty = remainingQty + @quantity
-              WHERE clientID = @clientID
-                AND packageID IN (
-                  SELECT packageID
-                  FROM sg.LQ_CSS_client_package_items
-                  WHERE clientID = @clientID AND productID = @productID
-                )
-            `);
+        // Restore package remainingQty
+        await transaction.request()
+          .input("clientID", sql.Int, clientID)
+          .input("productID", sql.Int, productID)
+          .input("quantity", sql.Int, quantity)
+          .query(`
+            UPDATE sg.LQ_CSS_client_packages
+            SET remainingQty = remainingQty + @quantity
+            WHERE clientID = @clientID
+              AND packageID IN (
+                SELECT packageID
+                FROM sg.LQ_CSS_client_package_items
+                WHERE clientID = @clientID AND productID = @productID
+              )
+          `);
 
-          // Log negative consumption for cancellation
-          await transaction.request()
-            .input("clientID", sql.Int, clientID)
-            .input("productID", sql.Int, productID)
-            .input("quantity", sql.Int, quantity)
-            .query(`
-              INSERT INTO sg.LQ_CSS_client_consumption_log
-              (clientID, productID, quantity, consumedFrom, createdAt)
-              VALUES (@clientID, @productID, -@quantity, 'cancelOrder', GETDATE())
-            `);
-
-        } catch (e) {
-          console.error("Package restore/log failed for productID:", productID, e.message);
-        }
+        // Log negative consumption
+        await transaction.request()
+          .input("clientID", sql.Int, clientID)
+          .input("productID", sql.Int, productID)
+          .input("quantity", sql.Int, quantity)
+          .query(`
+            INSERT INTO sg.LQ_CSS_client_consumption_log
+            (clientID, productID, quantity, consumedFrom, createdAt)
+            VALUES (@clientID, @productID, -@quantity, 'cancelOrder', GETDATE())
+          `);
       }
     }
 
     // Step 3️⃣: Update order status
     console.log("Updating order status...", { orderID, currentStatus, newStatus: status });
-
     await transaction.request()
       .input("orderID", sql.Int, orderID)
       .input("status", sql.NVarChar, status)
@@ -528,7 +521,6 @@ export const updateOrderStatus = async (orderID, status, changeBy = "System") =>
         FROM sg.LQ_CSS_fnb_orders
         WHERE orderID = @orderID
       `);
-
     console.log("Updated order:", res.recordset[0]);
 
     // Step 5️⃣: Log status change
