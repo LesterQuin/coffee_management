@@ -157,16 +157,26 @@ export const getAllClient = async () => {
   const pool = await poolPromise;
   const result = await pool.request().query(`
     SELECT 
-      c.clientID, c.deceasedName, c.registeredBy, c.mobileNo, c.email,
-      CONVERT(varchar(19), c.schedule_from, 120) AS scheduleFrom,
-      CONVERT(varchar(19), c.schedule_to, 120) AS scheduleTo,
+      c.clientID, 
+      c.deceasedName, 
+      c.registeredBy, 
+      c.mobileNo, 
+      c.email,
+      -- Adjust to Philippine Time (UTC+8)
+      CONVERT(varchar(19), DATEADD(HOUR, 8, c.schedule_from), 120) AS scheduleFrom,
+      CONVERT(varchar(19), DATEADD(HOUR, 8, c.schedule_to), 120) AS scheduleTo,
       ISNULL(cr.chapelName,'No Chapel Assigned') AS chapelName,
       ISNULL(fp.packageName,'No Package Assigned') AS packageName,
-      c.pin, c.packageBalance, c.additionalBalance,
+      c.pin, 
+      c.packageBalance, 
+      c.additionalBalance,
       ISNULL(c.contactPersonName,'') AS contactPersonName,
       ISNULL(c.contactPersonNumber,'') AS contactPersonNumber,
-      c.status, c.createdAt, c.updatedAt,
-      s.qrDataUrl, s.expires_at AS sessionExpires
+      c.status, 
+      c.createdAt, 
+      c.updatedAt,
+      s.qrDataUrl, 
+      s.expires_at AS sessionExpires
     FROM sg.LQ_CSS_client_info AS c
     LEFT JOIN sg.LQ_CSS_chapel_rooms AS cr ON c.chapelID = cr.chapelID
     LEFT JOIN sg.LQ_CSS_fnb_packages AS fp ON c.packageNo = fp.packageID
@@ -770,13 +780,23 @@ for (const pkgID of packageIDs) {
     validFrom = parseLocalDateTime(extraPkg.startDate, extraPkg.startTime);
     validTo   = parseLocalDateTime(extraPkg.endDate, extraPkg.endTime);
   } else {
-    // Default package: subtract 1 day from scheduleTo
+    // Default package: one day before scheduleTo (unless same day)
     validFrom = new Date(client.scheduleFrom);
-    validFrom.setHours(0, 1, 0); // 12:01 AM
+    validFrom.setHours(0, 1, 0); // 12:01 AM start
 
     validTo = new Date(client.scheduleTo);
-    validTo.setDate(validTo.getDate() - 1); // subtract 1 day
-    validTo.setHours(23, 59, 0); // 11:59 PM
+
+    // Check if scheduleFrom and scheduleTo are the same calendar day
+    const isSameDay =
+      validFrom.getFullYear() === validTo.getFullYear() &&
+      validFrom.getMonth() === validTo.getMonth() &&
+      validFrom.getDate() === validTo.getDate();
+
+    if (!isSameDay) {
+      validTo.setDate(validTo.getDate() - 1); // subtract 1 day only if multi-day schedule
+    }
+
+    validTo.setHours(23, 59, 0); // 11:59 PM end
   }
 
   // Validation
