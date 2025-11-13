@@ -1,16 +1,19 @@
 // models/fnb_cart_model.js
 import { poolPromise, sql } from "../config/db_config.js";
 
-// Helper: Get packageID for a client/product
-const getPackageID = async (transaction, clientID, productID, quantity) => {
+export const getPackageID = async (transaction, clientID, productID, quantity) => {
+  // If clientID is null (session-only), skip package lookup
+  if (!clientID) return null;
+
   const res = await transaction.request()
     .input("clientID", sql.Int, clientID)
-    .input("neededQty", sql.Int, quantity)
+    .input("productID", sql.Int, productID)
+    .input("quantity", sql.Int, quantity)
     .query(`
-      SELECT TOP 1 packageID, remainingQty
-      FROM sg.LQ_CSS_client_packages
-      WHERE clientID = @clientID AND remainingQty >= @neededQty
-      ORDER BY createdAt ASC
+      SELECT TOP 1 packageID
+      FROM sg.LQ_CSS_client_package_items
+      WHERE clientID = @clientID AND productID = @productID AND quantity >= @quantity
+      ORDER BY packageID ASC
     `);
 
   if (!res.recordset.length) throw new Error(`No available package for productID ${productID}`);
@@ -39,23 +42,29 @@ export const viewCartBySession = async (sessionID) => {
     .input("sessionID", sql.Int, sessionID)
     .query(`
       SELECT 
-          i.cartItemID, 
-          i.productID, 
-          p.categoryID,
-          categoryInfo.categoryName, 
-          p.productName, 
-          i.quantity AS qty,
-          p.price,
-          producSize.size,
-          (i.quantity * p.price) AS total
-      FROM sg.LQ_CSS_fnb_cart_items i
-      INNER JOIN sg.LQ_CSS_fnb_cart c ON i.cartID = c.cartID
-      INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
-      LEFT JOIN sg.LQ_CSS_fnb_categories AS categoryInfo
-          ON p.categoryID = categoryInfo.categoryID
-      LEFT JOIN sg.LQ_CSS_product_sizes AS producSize
-          ON p.sizeId = producSize.sizeId
-      WHERE c.sessionID = @sessionID
+    i.cartItemID, 
+    i.productID, 
+    p.categoryID,
+    categoryInfo.categoryName, 
+    p.productName, 
+    i.quantity AS qty,
+    p.price,
+    producSize.size,
+    i.sizeId,
+    i.packageID,
+    fp.packageName,
+    (i.quantity * p.price) AS total
+FROM sg.LQ_CSS_fnb_cart_items i
+INNER JOIN sg.LQ_CSS_fnb_cart c ON i.cartID = c.cartID
+INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
+LEFT JOIN sg.LQ_CSS_fnb_categories AS categoryInfo
+    ON p.categoryID = categoryInfo.categoryID
+LEFT JOIN sg.LQ_CSS_product_sizes AS producSize
+    ON p.sizeId = producSize.sizeId
+LEFT JOIN sg.LQ_CSS_fnb_packages AS fp
+    ON i.packageID = fp.packageID
+WHERE c.sessionID = @sessionID
+ORDER BY i.cartItemID;
     `);
   return res.recordset;
 };
@@ -143,13 +152,91 @@ export const getOrderReceipt = async (orderID) => {
 };
 
 // ----------------------POST-------------------------
+export const addItems = async (clientID, items, sessionID) => {
+  if (!Array.isArray(items) || items.length === 0) throw new Error("Items array is required");
+
+  const pool = await poolPromise;
+
+  // Get or create cartID
+  let res, cartID;
+  if (sessionID) {
+    res = await pool.request()
+      .input("sessionID", sql.Int, sessionID)
+      .query("SELECT cartID FROM sg.LQ_CSS_fnb_cart WHERE sessionID = @sessionID");
+    cartID = res.recordset[0]?.cartID;
+
+    if (!cartID) {
+      res = await pool.request()
+        .input("clientID", sql.Int, clientID || null)
+        .input("sessionID", sql.Int, sessionID)
+        .query("INSERT INTO sg.LQ_CSS_fnb_cart (clientID, sessionID) VALUES (@clientID, @sessionID); SELECT SCOPE_IDENTITY() AS cartID");
+      cartID = res.recordset[0].cartID;
+    }
+  } else {
+    res = await pool.request()
+      .input("clientID", sql.Int, clientID)
+      .query("SELECT cartID FROM sg.LQ_CSS_fnb_cart WHERE clientID = @clientID");
+    cartID = res.recordset[0]?.cartID;
+
+    if (!cartID) {
+      res = await pool.request()
+        .input("clientID", sql.Int, clientID)
+        .query("INSERT INTO sg.LQ_CSS_fnb_cart (clientID) VALUES (@clientID); SELECT SCOPE_IDENTITY() AS cartID");
+      cartID = res.recordset[0].cartID;
+    }
+  }
+
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+
+  try {
+    for (const item of items) {
+      const { productID, quantity, sizeId } = item;
+      if (!productID || !quantity) continue;
+
+      let packageID = null;
+
+      // Only fetch packageID if clientID exists
+      if (clientID) {
+        packageID = await getPackageID(transaction, clientID, productID, quantity);
+      }
+
+      await transaction.request()
+        .input("cartID", sql.Int, cartID)
+        .input("productID", sql.Int, productID)
+        .input("quantity", sql.Int, quantity)
+        .input("sizeId", sql.Int, sizeId || null)
+        .input("packageID", sql.Int, packageID)
+        .query(`
+          IF EXISTS (SELECT 1 FROM sg.LQ_CSS_fnb_cart_items 
+                     WHERE cartID = @cartID AND productID = @productID AND sizeId = @sizeId)
+            UPDATE sg.LQ_CSS_fnb_cart_items 
+            SET quantity = quantity + @quantity, packageID = @packageID
+            WHERE cartID = @cartID AND productID = @productID AND sizeId = @sizeId
+          ELSE
+            INSERT INTO sg.LQ_CSS_fnb_cart_items (cartID, productID, quantity, sizeId, packageID) 
+            VALUES (@cartID, @productID, @quantity, @sizeId, @packageID)
+        `);
+    }
+
+    await transaction.commit();
+    return true;
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
+};
+
+ //new code
+
 // export const addItems = async (clientID, items, sessionID) => {
 //   if (!Array.isArray(items) || items.length === 0) throw new Error("Items array is required");
 
 //   const pool = await poolPromise;
 
 //   // Get or create cartID using clientID or sessionID
-//   let res, cartID;
+//   let res;
+//   let cartID;
 
 //   if (sessionID) {
 //     res = await pool.request()
@@ -178,254 +265,52 @@ export const getOrderReceipt = async (orderID) => {
 //     }
 //   }
 
-//   const transaction = new sql.Transaction(pool);
-//   await transaction.begin();
+//   // Loop through items
+//   for (const item of items) {
+//     const { productID, quantity, sizeId } = item;
+//     if (!productID || !quantity) continue;
 
-//   try {
-//     for (const item of items) {
-//       const { productID, quantity, sizeId } = item;
-//       if (!productID || !quantity) continue;
+//     // Check that product exists
+//     const productCheck = await pool.request()
+//       .input("productID", sql.Int, productID)
+//       .query("SELECT 1 FROM sg.LQ_CSS_fnb_products WHERE productID = @productID");
 
-//       // Fetch packageID for this item
-//       const packageID = await getPackageID(transaction, clientID, productID, quantity);
-
-//       // Insert or update cart item
-//       await transaction.request()
-//         .input("cartID", sql.Int, cartID)
-//         .input("productID", sql.Int, productID)
-//         .input("quantity", sql.Int, quantity)
-//         .input("sizeId", sql.Int, sizeId || null)
-//         .input("packageID", sql.Int, packageID)
-//         .query(`
-//           IF EXISTS (SELECT 1 FROM sg.LQ_CSS_fnb_cart_items 
-//                      WHERE cartID = @cartID AND productID = @productID AND sizeId = @sizeId)
-//             UPDATE sg.LQ_CSS_fnb_cart_items 
-//             SET quantity = quantity + @quantity, packageID = @packageID
-//             WHERE cartID = @cartID AND productID = @productID AND sizeId = @sizeId
-//           ELSE
-//             INSERT INTO sg.LQ_CSS_fnb_cart_items (cartID, productID, quantity, sizeId, packageID) 
-//             VALUES (@cartID, @productID, @quantity, @sizeId, @packageID)
-//         `);
+//     if (!productCheck.recordset.length) {
+//       throw new Error(`Product ID ${productID} does not exist`);
 //     }
 
-//     await transaction.commit();
-//     return true;
-//   } catch (err) {
-//     await transaction.rollback();
-//     throw err;
+//     // Check size if provided
+//     if (sizeId) {
+//       const sizeCheck = await pool.request()
+//         .input("sizeId", sql.Int, sizeId)
+//         .query("SELECT 1 FROM sg.LQ_CSS_product_sizes WHERE sizeId = @sizeId");
+
+//       if (!sizeCheck.recordset.length) {
+//         throw new Error(`Size ID ${sizeId} does not exist`);
+//       }
+//     }
+
+//     // Insert or update cart item
+//     await pool.request()
+//       .input("cartID", sql.Int, cartID)
+//       .input("productID", sql.Int, productID)
+//       .input("quantity", sql.Int, quantity)
+//       .input("sizeId", sql.Int, sizeId || null)
+//       .query(`
+//         IF EXISTS (SELECT 1 FROM sg.LQ_CSS_fnb_cart_items 
+//                    WHERE cartID = @cartID AND productID = @productID AND sizeId = @sizeId)
+//           UPDATE sg.LQ_CSS_fnb_cart_items 
+//           SET quantity = quantity + @quantity 
+//           WHERE cartID = @cartID AND productID = @productID AND sizeId = @sizeId
+//         ELSE
+//           INSERT INTO sg.LQ_CSS_fnb_cart_items (cartID, productID, quantity, sizeId) 
+//           VALUES (@cartID, @productID, @quantity, @sizeId)
+//       `);
 //   }
-// }; //new code
 
-export const addItems = async (clientID, items, sessionID) => {
-  if (!Array.isArray(items) || items.length === 0) throw new Error("Items array is required");
+//   return true;
+// };
 
-  const pool = await poolPromise;
-
-  // Get or create cartID using clientID or sessionID
-  let res;
-  let cartID;
-
-  if (sessionID) {
-    res = await pool.request()
-      .input("sessionID", sql.Int, sessionID)
-      .query("SELECT cartID FROM sg.LQ_CSS_fnb_cart WHERE sessionID = @sessionID");
-    cartID = res.recordset[0]?.cartID;
-
-    if (!cartID) {
-      res = await pool.request()
-        .input("clientID", sql.Int, clientID || null)
-        .input("sessionID", sql.Int, sessionID)
-        .query("INSERT INTO sg.LQ_CSS_fnb_cart (clientID, sessionID) VALUES (@clientID, @sessionID); SELECT SCOPE_IDENTITY() AS cartID");
-      cartID = res.recordset[0].cartID;
-    }
-  } else {
-    res = await pool.request()
-      .input("clientID", sql.Int, clientID)
-      .query("SELECT cartID FROM sg.LQ_CSS_fnb_cart WHERE clientID = @clientID");
-    cartID = res.recordset[0]?.cartID;
-
-    if (!cartID) {
-      res = await pool.request()
-        .input("clientID", sql.Int, clientID)
-        .query("INSERT INTO sg.LQ_CSS_fnb_cart (clientID) VALUES (@clientID); SELECT SCOPE_IDENTITY() AS cartID");
-      cartID = res.recordset[0].cartID;
-    }
-  }
-
-  // Loop through items
-  for (const item of items) {
-    const { productID, quantity, sizeId } = item;
-    if (!productID || !quantity) continue;
-
-    // Check that product exists
-    const productCheck = await pool.request()
-      .input("productID", sql.Int, productID)
-      .query("SELECT 1 FROM sg.LQ_CSS_fnb_products WHERE productID = @productID");
-
-    if (!productCheck.recordset.length) {
-      throw new Error(`Product ID ${productID} does not exist`);
-    }
-
-    // Check size if provided
-    if (sizeId) {
-      const sizeCheck = await pool.request()
-        .input("sizeId", sql.Int, sizeId)
-        .query("SELECT 1 FROM sg.LQ_CSS_product_sizes WHERE sizeId = @sizeId");
-
-      if (!sizeCheck.recordset.length) {
-        throw new Error(`Size ID ${sizeId} does not exist`);
-      }
-    }
-
-    // Insert or update cart item
-    await pool.request()
-      .input("cartID", sql.Int, cartID)
-      .input("productID", sql.Int, productID)
-      .input("quantity", sql.Int, quantity)
-      .input("sizeId", sql.Int, sizeId || null)
-      .query(`
-        IF EXISTS (SELECT 1 FROM sg.LQ_CSS_fnb_cart_items 
-                   WHERE cartID = @cartID AND productID = @productID AND sizeId = @sizeId)
-          UPDATE sg.LQ_CSS_fnb_cart_items 
-          SET quantity = quantity + @quantity 
-          WHERE cartID = @cartID AND productID = @productID AND sizeId = @sizeId
-        ELSE
-          INSERT INTO sg.LQ_CSS_fnb_cart_items (cartID, productID, quantity, sizeId) 
-          VALUES (@cartID, @productID, @quantity, @sizeId)
-      `);
-  }
-
-  return true;
-};
-
-
-// export const checkout = async (clientID = null, sessionID = null, staffID = null, productIDs = null) => {
-//   const pool = await poolPromise;
-//   const transaction = new sql.Transaction(pool);
-
-//   try {
-//     await transaction.begin();
-
-//     // Resolve clientID from sessionID if needed
-//     if (!clientID && sessionID) {
-//       const clientRes = await transaction.request()
-//         .input("sessionID", sql.Int, sessionID)
-//         .query(`SELECT clientID FROM sg.LQ_CSS_sessions_info WHERE sessionID = @sessionID`);
-//       clientID = clientRes.recordset[0]?.clientID || null;
-//     }
-//     if (!clientID) throw new Error("Cannot resolve clientID or sessionID");
-
-//     const productIDsString = productIDs?.map(id => parseInt(id, 10)).join(',') || null;
-
-//     // Fetch cart items
-//     const cartQuery = `
-//       SELECT i.cartItemID, i.productID, i.quantity, i.sizeId
-//       FROM sg.LQ_CSS_fnb_cart_items i
-//       INNER JOIN sg.LQ_CSS_fnb_cart c ON i.cartID = c.cartID
-//       WHERE (c.clientID = @clientID OR c.sessionID = @sessionID)
-//       ${productIDsString ? `AND i.productID IN (${productIDsString})` : ""}
-//     `;
-//     const cartRes = await transaction.request()
-//       .input("clientID", sql.Int, clientID)
-//       .input("sessionID", sql.Int, sessionID)
-//       .query(cartQuery);
-//     const cartItems = cartRes.recordset;
-//     if (!cartItems.length) throw new Error("Cart is empty");
-
-//     // Create new order
-//     const orderInsert = await transaction.request()
-//       .input("clientID", sql.Int, clientID)
-//       .input("sessionID", sql.Int, sessionID)
-//       .input("staffID", sql.Int, staffID)
-//       .query(`
-//         INSERT INTO sg.LQ_CSS_fnb_orders (clientID, status, createdAt, updatedAt, staffID, sessionID)
-//         OUTPUT INSERTED.orderID
-//         VALUES (@clientID, 'Pending', GETDATE(), GETDATE(), @staffID, @sessionID)
-//       `);
-//     const orderID = orderInsert.recordset[0].orderID;
-
-//     // Process cart items
-//     for (const item of cartItems) {
-//       const packageID = await getPackageID(transaction, clientID, item.productID, item.quantity);
-
-//       // Deduct package quantity
-//       await transaction.request()
-//         .input("clientID", sql.Int, clientID)
-//         .input("packageID", sql.Int, packageID)
-//         .input("quantity", sql.Int, item.quantity)
-//         .query(`
-//           UPDATE sg.LQ_CSS_client_packages
-//           SET remainingQty = remainingQty - @quantity
-//           WHERE clientID = @clientID AND packageID = @packageID
-//         `);
-
-//       // Log consumption
-//       await transaction.request()
-//         .input("clientID", sql.Int, clientID)
-//         .input("packageID", sql.Int, packageID)
-//         .input("productID", sql.Int, item.productID)
-//         .input("quantity", sql.Int, item.quantity)
-//         .query(`
-//           INSERT INTO sg.LQ_CSS_client_consumption_log
-//           (clientID, packageID, productID, quantity, consumedFrom, createdAt)
-//           VALUES (@clientID, @packageID, @productID, @quantity, 'checkout', GETDATE())
-//         `);
-
-//       // Insert into order items with packageID
-//       await transaction.request()
-//         .input("orderID", sql.Int, orderID)
-//         .input("productID", sql.Int, item.productID)
-//         .input("quantity", sql.Int, item.quantity)
-//         .input("sizeId", sql.Int, item.sizeId || null)
-//         .input("packageID", sql.Int, packageID)
-//         .query(`
-//           INSERT INTO sg.LQ_CSS_fnb_order_items (orderID, productID, quantity, sizeId, packageID)
-//           VALUES (@orderID, @productID, @quantity, @sizeId, @packageID)
-//         `);
-//     }
-
-//     // Clear cart
-//     await transaction.request()
-//       .input("clientID", sql.Int, clientID)
-//       .input("sessionID", sql.Int, sessionID)
-//       .query(`
-//         DELETE i
-//         FROM sg.LQ_CSS_fnb_cart_items i
-//         INNER JOIN sg.LQ_CSS_fnb_cart c ON i.cartID = c.cartID
-//         WHERE c.clientID = @clientID OR c.sessionID = @sessionID
-//       `);
-
-//     await transaction.commit();
-
-//     // Build receipt
-//     const itemsRes = await pool.request()
-//       .input("orderID", sql.Int, orderID)
-//       .query(`
-//         SELECT p.productID,
-//               p.productName AS description,
-//               i.quantity AS qty,
-//               p.price AS amount,
-//               (i.quantity * p.price) AS total
-//         FROM sg.LQ_CSS_fnb_order_items i
-//         INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
-//         WHERE i.orderID = @orderID
-//       `);
-
-//     const totalAmount = itemsRes.recordset.reduce((sum, i) => sum + i.total, 0);
-
-//     return {
-//       orderID,
-//       orderStatus: "Pending",
-//       items: itemsRes.recordset,
-//       totalAmount,
-//       handledByStaffID: staffID
-//     };
-
-//   } catch (err) {
-//     await transaction.rollback();
-//     throw new Error(err.message);
-//   }
-// }; //new code
 
 export const checkout = async (clientID = null, sessionID = null, staffID = null, productIDs = null) => {
   const pool = await poolPromise;
@@ -434,7 +319,7 @@ export const checkout = async (clientID = null, sessionID = null, staffID = null
   try {
     await transaction.begin();
 
-    // 1️⃣ Resolve clientID from sessionID
+    // Resolve clientID from sessionID if needed
     if (!clientID && sessionID) {
       const clientRes = await transaction.request()
         .input("sessionID", sql.Int, sessionID)
@@ -442,23 +327,25 @@ export const checkout = async (clientID = null, sessionID = null, staffID = null
       clientID = clientRes.recordset[0]?.clientID || null;
     }
     if (!clientID) throw new Error("Cannot resolve clientID or sessionID");
-    const productIDsString = productIDs.map(id => parseInt(id, 10)).join(',');
-    
-    // 2️⃣ Fetch cart items
+
+    const productIDsString = productIDs?.map(id => parseInt(id, 10)).join(',') || null;
+
+    // Fetch cart items
+    const cartQuery = `
+      SELECT i.cartItemID, i.productID, i.quantity, i.sizeId
+      FROM sg.LQ_CSS_fnb_cart_items i
+      INNER JOIN sg.LQ_CSS_fnb_cart c ON i.cartID = c.cartID
+      WHERE (c.clientID = @clientID OR c.sessionID = @sessionID)
+      ${productIDsString ? `AND i.productID IN (${productIDsString})` : ""}
+    `;
     const cartRes = await transaction.request()
       .input("clientID", sql.Int, clientID)
       .input("sessionID", sql.Int, sessionID)
-      .query(`
-        SELECT i.cartItemID, i.productID, i.quantity, i.sizeId
-        FROM sg.LQ_CSS_fnb_cart_items i
-        INNER JOIN sg.LQ_CSS_fnb_cart c ON i.cartID = c.cartID
-        WHERE c.clientID = @clientID OR c.sessionID = @sessionID
-        AND i.productID IN (${productIDsString})
-      `);
+      .query(cartQuery);
     const cartItems = cartRes.recordset;
     if (!cartItems.length) throw new Error("Cart is empty");
 
-    // 3️⃣ Create new order
+    // Create new order
     const orderInsert = await transaction.request()
       .input("clientID", sql.Int, clientID)
       .input("sessionID", sql.Int, sessionID)
@@ -470,23 +357,11 @@ export const checkout = async (clientID = null, sessionID = null, staffID = null
       `);
     const orderID = orderInsert.recordset[0].orderID;
 
-    // 4️⃣ Deduct from package pool (remainingQty) for all items
+    // Process cart items
     for (const item of cartItems) {
-      // Find a package with enough remainingQty
-      const { recordset: pkgRow } = await transaction.request()
-        .input("clientID", sql.Int, clientID)
-        .input("neededQty", sql.Int, item.quantity)
-        .query(`
-          SELECT TOP 1 packageID, remainingQty
-          FROM sg.LQ_CSS_client_packages
-          WHERE clientID = @clientID AND remainingQty >= @neededQty
-          ORDER BY createdAt ASC
-        `);
+      const packageID = await getPackageID(transaction, clientID, item.productID, item.quantity);
 
-      if (!pkgRow.length) throw new Error(`Already Exceed the Limit of the Package.`);
-      const { packageID } = pkgRow[0];
-
-      // Deduct from package pool
+      // Deduct package quantity
       await transaction.request()
         .input("clientID", sql.Int, clientID)
         .input("packageID", sql.Int, packageID)
@@ -509,19 +384,20 @@ export const checkout = async (clientID = null, sessionID = null, staffID = null
           VALUES (@clientID, @packageID, @productID, @quantity, 'checkout', GETDATE())
         `);
 
-      // Insert into order items
+      // Insert into order items with packageID
       await transaction.request()
         .input("orderID", sql.Int, orderID)
         .input("productID", sql.Int, item.productID)
         .input("quantity", sql.Int, item.quantity)
         .input("sizeId", sql.Int, item.sizeId || null)
+        .input("packageID", sql.Int, packageID)
         .query(`
-          INSERT INTO sg.LQ_CSS_fnb_order_items (orderID, productID, quantity, sizeId)
-          VALUES (@orderID, @productID, @quantity, @sizeId)
+          INSERT INTO sg.LQ_CSS_fnb_order_items (orderID, productID, quantity, sizeId, packageID)
+          VALUES (@orderID, @productID, @quantity, @sizeId, @packageID)
         `);
     }
 
-    // 5️⃣ Clear cart
+    // Clear cart
     await transaction.request()
       .input("clientID", sql.Int, clientID)
       .input("sessionID", sql.Int, sessionID)
@@ -534,7 +410,7 @@ export const checkout = async (clientID = null, sessionID = null, staffID = null
 
     await transaction.commit();
 
-    // 6️⃣ Build receipt
+    // Build receipt
     const itemsRes = await pool.request()
       .input("orderID", sql.Int, orderID)
       .query(`
@@ -562,7 +438,144 @@ export const checkout = async (clientID = null, sessionID = null, staffID = null
     await transaction.rollback();
     throw new Error(err.message);
   }
-};
+}; //new code
+
+// export const checkout = async (clientID = null, sessionID = null, staffID = null, productIDs = null) => {
+//   const pool = await poolPromise;
+//   const transaction = new sql.Transaction(pool);
+
+//   try {
+//     await transaction.begin();
+
+//     // 1️⃣ Resolve clientID from sessionID
+//     if (!clientID && sessionID) {
+//       const clientRes = await transaction.request()
+//         .input("sessionID", sql.Int, sessionID)
+//         .query(`SELECT clientID FROM sg.LQ_CSS_sessions_info WHERE sessionID = @sessionID`);
+//       clientID = clientRes.recordset[0]?.clientID || null;
+//     }
+//     if (!clientID) throw new Error("Cannot resolve clientID or sessionID");
+//     const productIDsString = productIDs.map(id => parseInt(id, 10)).join(',');
+    
+//     // 2️⃣ Fetch cart items
+//     const cartRes = await transaction.request()
+//       .input("clientID", sql.Int, clientID)
+//       .input("sessionID", sql.Int, sessionID)
+//       .query(`
+//         SELECT i.cartItemID, i.productID, i.quantity, i.sizeId
+//         FROM sg.LQ_CSS_fnb_cart_items i
+//         INNER JOIN sg.LQ_CSS_fnb_cart c ON i.cartID = c.cartID
+//         WHERE c.clientID = @clientID OR c.sessionID = @sessionID
+//         AND i.productID IN (${productIDsString})
+//       `);
+//     const cartItems = cartRes.recordset;
+//     if (!cartItems.length) throw new Error("Cart is empty");
+
+//     // 3️⃣ Create new order
+//     const orderInsert = await transaction.request()
+//       .input("clientID", sql.Int, clientID)
+//       .input("sessionID", sql.Int, sessionID)
+//       .input("staffID", sql.Int, staffID)
+//       .query(`
+//         INSERT INTO sg.LQ_CSS_fnb_orders (clientID, status, createdAt, updatedAt, staffID, sessionID)
+//         OUTPUT INSERTED.orderID
+//         VALUES (@clientID, 'Pending', GETDATE(), GETDATE(), @staffID, @sessionID)
+//       `);
+//     const orderID = orderInsert.recordset[0].orderID;
+
+//     // 4️⃣ Deduct from package pool (remainingQty) for all items
+//     for (const item of cartItems) {
+//       // Find a package with enough remainingQty
+//       const { recordset: pkgRow } = await transaction.request()
+//         .input("clientID", sql.Int, clientID)
+//         .input("neededQty", sql.Int, item.quantity)
+//         .query(`
+//           SELECT TOP 1 packageID, remainingQty
+//           FROM sg.LQ_CSS_client_packages
+//           WHERE clientID = @clientID AND remainingQty >= @neededQty
+//           ORDER BY createdAt ASC
+//         `);
+
+//       if (!pkgRow.length) throw new Error(`Already Exceed the Limit of the Package.`);
+//       const { packageID } = pkgRow[0];
+
+//       // Deduct from package pool
+//       await transaction.request()
+//         .input("clientID", sql.Int, clientID)
+//         .input("packageID", sql.Int, packageID)
+//         .input("quantity", sql.Int, item.quantity)
+//         .query(`
+//           UPDATE sg.LQ_CSS_client_packages
+//           SET remainingQty = remainingQty - @quantity
+//           WHERE clientID = @clientID AND packageID = @packageID
+//         `);
+
+//       // Log consumption
+//       await transaction.request()
+//         .input("clientID", sql.Int, clientID)
+//         .input("packageID", sql.Int, packageID)
+//         .input("productID", sql.Int, item.productID)
+//         .input("quantity", sql.Int, item.quantity)
+//         .query(`
+//           INSERT INTO sg.LQ_CSS_client_consumption_log
+//           (clientID, packageID, productID, quantity, consumedFrom, createdAt)
+//           VALUES (@clientID, @packageID, @productID, @quantity, 'checkout', GETDATE())
+//         `);
+
+//       // Insert into order items
+//       await transaction.request()
+//         .input("orderID", sql.Int, orderID)
+//         .input("productID", sql.Int, item.productID)
+//         .input("quantity", sql.Int, item.quantity)
+//         .input("sizeId", sql.Int, item.sizeId || null)
+//         .query(`
+//           INSERT INTO sg.LQ_CSS_fnb_order_items (orderID, productID, quantity, sizeId)
+//           VALUES (@orderID, @productID, @quantity, @sizeId)
+//         `);
+//     }
+
+//     // 5️⃣ Clear cart
+//     await transaction.request()
+//       .input("clientID", sql.Int, clientID)
+//       .input("sessionID", sql.Int, sessionID)
+//       .query(`
+//         DELETE i
+//         FROM sg.LQ_CSS_fnb_cart_items i
+//         INNER JOIN sg.LQ_CSS_fnb_cart c ON i.cartID = c.cartID
+//         WHERE c.clientID = @clientID OR c.sessionID = @sessionID
+//       `);
+
+//     await transaction.commit();
+
+//     // 6️⃣ Build receipt
+//     const itemsRes = await pool.request()
+//       .input("orderID", sql.Int, orderID)
+//       .query(`
+//         SELECT p.productID,
+//               p.productName AS description,
+//               i.quantity AS qty,
+//               p.price AS amount,
+//               (i.quantity * p.price) AS total
+//         FROM sg.LQ_CSS_fnb_order_items i
+//         INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
+//         WHERE i.orderID = @orderID
+//       `);
+
+//     const totalAmount = itemsRes.recordset.reduce((sum, i) => sum + i.total, 0);
+
+//     return {
+//       orderID,
+//       orderStatus: "Pending",
+//       items: itemsRes.recordset,
+//       totalAmount,
+//       handledByStaffID: staffID
+//     };
+
+//   } catch (err) {
+//     await transaction.rollback();
+//     throw new Error(err.message);
+//   }
+// };
 
 // ----------------------PUT-------------------------
 // Update item quantity in cart

@@ -157,26 +157,26 @@ export const viewCartSession = async (req, res) => {
       return success(res, { items: [], totalAmount: 0 }, "Cart is empty");
     }
 
-    // Group items by productID + sizeId
+    // Group items by productID + sizeId + packageID
     const grouped = cart.reduce((acc, item) => {
-      const key = `${item.productID}_${item.sizeId}`;
+      const key = `${item.productID}_${item.sizeId || '0'}_${item.packageID || '0'}`;
+      
       if (!acc[key]) {
         acc[key] = {
           productID: item.productID,
-          categoryID: item.categoryId,
-          categoryName: item.categoryName,  // if you join category table
           productName: item.productName,
-          size: item.size,
-          sizeId: item.sizeId,
+          size: item.size || 'N/A',
+          sizeId: item.sizeId || null,
+          packageID: item.packageID || null,
           qty: 0,
           amount: item.price,
           total: 0
         };
       }
 
-      acc[key].qty += item.qty;
-      acc[key].amount = item.price;  // price per item
-      acc[key].total += item.total || item.price * item.qty;
+      acc[key].qty += item.qty || 0;
+      acc[key].amount = item.price; // price per item
+      acc[key].total += item.total || (item.qty || 0) * item.price;
 
       return acc;
     }, {});
@@ -190,7 +190,53 @@ export const viewCartSession = async (req, res) => {
   }
 };
 
+
 // ----------------------POST-------------------------
+export const addItems = async (req, res) => {
+  try {
+    const { clientID, sessionID, items, productID, quantity, sizeId } = req.body;
+
+    if (!clientID && !sessionID) {
+      return error(res, "Missing required field: clientID or sessionID", 400);
+    }
+
+    // Normalize input
+    let itemsArray = [];
+    if (Array.isArray(items) && items.length > 0) {
+      itemsArray = items.map(i => ({ productID: i.productID, quantity: i.quantity, sizeId: i.sizeId || null }));
+    } else if (productID && quantity) {
+      itemsArray = [{ productID, quantity, sizeId: sizeId || null }];
+    } else {
+      return error(res, "Invalid item format", 400);
+    }
+
+    // Add items to cart
+    await Model.addItems(clientID, itemsArray, sessionID);
+
+    // Fetch updated cart
+    const cartItems = sessionID
+      ? await Model.viewCartBySession(sessionID)
+      : await Model.viewCart(clientID);
+
+    // Filter only added items
+    const addedProducts = cartItems
+      .filter(item => itemsArray.some(i => i.productID === item.productID && i.sizeId === item.sizeId))
+      .map(c => ({
+        productID: c.productID,
+        description: c.productName,
+        size: c.size || 'N/A',
+        qty: c.qty,
+        amount: c.price,
+        total: c.total,
+        packageID: c.packageID || null
+      }));
+
+    return success(res, addedProducts, "Items added to cart successfully");
+  } catch (e) {
+    return error(res, e.message, 500);
+  }
+}; //new code
+
 // export const addItems = async (req, res) => {
 //   try {
 //     const { clientID, sessionID, items, productID, quantity, sizeId } = req.body;
@@ -226,59 +272,14 @@ export const viewCartSession = async (req, res) => {
 //         size: c.size || 'N/A',
 //         qty: c.quantity,
 //         amount: c.price,
-//         total: c.total,
-//         packageID: c.packageID || null
+//         total: c.total
 //       }));
 
 //     return success(res, addedProducts, "Items added to cart successfully");
 //   } catch (e) {
 //     return error(res, e.message, 500);
 //   }
-// }; //new code
-
-export const addItems = async (req, res) => {
-  try {
-    const { clientID, sessionID, items, productID, quantity, sizeId } = req.body;
-
-    if (!clientID && !sessionID) {
-      return error(res, "Missing required field: clientID or sessionID", 400);
-    }
-
-    // Normalize input
-    let itemsArray = [];
-    if (Array.isArray(items) && items.length > 0) {
-      itemsArray = items.map(i => ({ productID: i.productID, quantity: i.quantity, sizeId: i.sizeId || null }));
-    } else if (productID && quantity) {
-      itemsArray = [{ productID, quantity, sizeId: sizeId || null }];
-    } else {
-      return error(res, "Invalid item format", 400);
-    }
-
-    // Add items to cart
-    await Model.addItems(clientID, itemsArray, sessionID);
-
-    // Fetch updated cart
-    const cartItems = sessionID
-      ? await Model.viewCartBySession(sessionID)
-      : await Model.viewCart(clientID);
-
-    // Filter only added items
-    const addedProducts = cartItems
-      .filter(item => itemsArray.some(i => i.productID === item.productID && i.sizeId === item.sizeId))
-      .map(c => ({
-        productID: c.productID,
-        description: c.productName,
-        size: c.size || 'N/A',
-        qty: c.quantity,
-        amount: c.price,
-        total: c.total
-      }));
-
-    return success(res, addedProducts, "Items added to cart successfully");
-  } catch (e) {
-    return error(res, e.message, 500);
-  }
-};
+// };
 
 // export const checkout = async (req, res) => {
 //   try {
@@ -348,7 +349,7 @@ export const addItems = async (req, res) => {
 
 export const checkout = async (req, res) => {
   try {
-    const { clientID = null, sessionID = null, productID = []} = req.body;
+    const { clientID = null, sessionID = null, productID = [] } = req.body;
     const staffID = req.user?.staffID || null;
 
     if (!clientID && !sessionID) {
@@ -362,11 +363,12 @@ export const checkout = async (req, res) => {
     // Perform checkout
     const receipt = await Model.checkout(clientID, sessionID, staffID, productID);
 
-    // If cart is empty, fetch items from the newly created order
+    // Initialize items array and total
     let itemsArray = [];
     let totalAmount = 0;
 
-    if (receipt.items.length === 0 && receipt.orderID) {
+    if ((receipt.items?.length || 0) === 0 && receipt.orderID) {
+      // Fetch from order if cart is empty after checkout
       const orderData = await Model.getOrderReceipt(receipt.orderID);
       if (orderData && orderData.items.length) {
         itemsArray = orderData.items.map(i => ({
@@ -374,25 +376,29 @@ export const checkout = async (req, res) => {
           description: i.description,
           qty: i.qty,
           amount: i.amount,
-          total: i.qty * i.amount
+          total: i.qty * i.amount,
+          packageID: i.packageID || null  // include packageID here
         }));
         totalAmount = orderData.total;
       }
     } else {
-      // Group items by productID
+      // Group items by productID + packageID
       const grouped = receipt.items.reduce((acc, item) => {
-        const key = `${item.productID}`;
+        const key = `${item.productID}_${item.packageID || 'null'}`;
         if (!acc[key]) {
           acc[key] = {
             productID: item.productID,
             description: item.description,
             qty: 0,
-            amount: item.amount || 0
+            amount: item.amount || 0,
+            packageID: item.packageID || null
           };
         }
         acc[key].qty += item.qty;
+        acc[key].total = (acc[key].total || 0) + (item.total || item.qty * item.amount);
         return acc;
       }, {});
+
       itemsArray = Object.values(grouped);
       totalAmount = itemsArray.reduce((sum, i) => sum + (i.total || i.qty * i.amount), 0);
     }
@@ -408,6 +414,7 @@ export const checkout = async (req, res) => {
     return error(res, e.message, 500);
   }
 };
+
 // ----------------------PUT-------------------------
 // Update item quantity or size
 export const updateItem = async (req, res) => {
