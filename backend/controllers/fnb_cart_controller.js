@@ -4,63 +4,24 @@ import * as Model from "../models/fnb_cart_model.js";
 import { success, error } from "../utils/response_helper.js";
 
 // ----------------------GET-------------------------
-// export const viewAllCarts = async (req, res) => {
-//   try {
-//     const carts = await Model.viewAllCarts();
-
-//     // Group items by cartID
-//     const grouped = carts.reduce((acc, item) => {
-//       if (!acc[item.cartID]) {
-//         acc[item.cartID] = {
-//           cartID: item.cartID,
-//           clientID: item.clientID,
-//           deceasedName: item.deceasedName,
-//           customerName: item.customerName,
-//           customerNumber: item.customerNumber,
-//           items: [],
-//           totalAmount: 0
-//         };
-//       }
-//       acc[item.cartID].items.push({
-//         cartItemID: item.cartItemID,
-//         productID: item.productID,
-//         description: item.productName,
-//         qty: item.quantity,
-//         sizeId: item.sizeId,
-//         amount: item.price,
-//         total: item.total
-//       });
-//       acc[item.cartID].totalAmount += item.total;
-//       return acc;
-//     }, {});
-
-//     return success(res, Object.values(grouped), "All carts retrieved successfully");
-//   } catch (e) {
-//     return error(res, e.message, 500);
-//   }
-// };
 export const viewAllCarts = async (req, res) => {
   try {
     const carts = await Model.viewAllCarts();
 
-    // Group items by cartID and then by productID + sizeId
     const groupedCarts = carts.reduce((acc, item) => {
-      if (!acc[item.cartID]) {
-        acc[item.cartID] = {
-          cartID: item.cartID,
+      if (!acc[item.orderID]) {
+        acc[item.orderID] = {
+          orderID: item.orderID,
           clientID: item.clientID,
-          sessionID: item.sessionID,      // added sessionID
+          sessionID: item.sessionID,
           deceasedName: item.deceasedName,
-          customerName: item.customerName,
-          customerNumber: item.customerNumber,
+          userName: item.userName,
           items: [],
           totalAmount: 0
         };
       }
 
-      const cart = acc[item.cartID];
-
-      // Group items by productID + sizeId
+      const cart = acc[item.orderID];
       const key = `${item.productID}_${item.sizeId}`;
       let groupedItem = cart.items.find(i => i.productID === item.productID && i.sizeId === item.sizeId);
 
@@ -71,7 +32,9 @@ export const viewAllCarts = async (req, res) => {
           sizeId: item.sizeId,
           qty: 0,
           amount: item.price,
-          total: 0
+          total: 0,
+          packageID: item.packageID || null,
+          packageName: item.packageName || null
         };
         cart.items.push(groupedItem);
       }
@@ -88,6 +51,56 @@ export const viewAllCarts = async (req, res) => {
     return error(res, e.message, 500);
   }
 };
+//new code
+// export const viewAllCarts = async (req, res) => {
+//   try {
+//     const carts = await Model.viewAllCarts();
+
+//     // Group items by cartID and then by productID + sizeId
+//     const groupedCarts = carts.reduce((acc, item) => {
+//       if (!acc[item.cartID]) {
+//         acc[item.cartID] = {
+//           cartID: item.cartID,
+//           clientID: item.clientID,
+//           sessionID: item.sessionID,      // added sessionID
+//           deceasedName: item.deceasedName,
+//           customerName: item.customerName,
+//           customerNumber: item.customerNumber,
+//           items: [],
+//           totalAmount: 0
+//         };
+//       }
+
+//       const cart = acc[item.cartID];
+
+//       // Group items by productID + sizeId
+//       const key = `${item.productID}_${item.sizeId}`;
+//       let groupedItem = cart.items.find(i => i.productID === item.productID && i.sizeId === item.sizeId);
+
+//       if (!groupedItem) {
+//         groupedItem = {
+//           productID: item.productID,
+//           description: item.productName,
+//           sizeId: item.sizeId,
+//           qty: 0,
+//           amount: item.price,
+//           total: 0
+//         };
+//         cart.items.push(groupedItem);
+//       }
+
+//       groupedItem.qty += item.quantity;
+//       groupedItem.total += item.total || 0;
+//       cart.totalAmount += item.total || 0;
+
+//       return acc;
+//     }, {});
+
+//     return success(res, Object.values(groupedCarts), "All carts retrieved successfully");
+//   } catch (e) {
+//     return error(res, e.message, 500);
+//   }
+// };
 
 // View cart
 export const viewCart = async (req, res) => {
@@ -178,20 +191,50 @@ export const viewCartSession = async (req, res) => {
 };
 
 // ----------------------POST-------------------------
-// export const addItem = async (req, res) => {
+// export const addItems = async (req, res) => {
 //   try {
-//     const { clientID, productID, quantity, sizeId } = req.body;
+//     const { clientID, sessionID, items, productID, quantity, sizeId } = req.body;
 
-//     if (!clientID || !productID || !quantity || !sizeId) {
-//       return error(res, "Missing required fields: clientID, productID, quantity, sizeId", 400);
+//     if (!clientID && !sessionID) {
+//       return error(res, "Missing required field: clientID or sessionID", 400);
 //     }
 
-//     await Model.addItem(clientID, productID, quantity, sizeId);
-//     return success(res, null, "Item added to cart");
+//     // Normalize input
+//     let itemsArray = [];
+//     if (Array.isArray(items) && items.length > 0) {
+//       itemsArray = items.map(i => ({ productID: i.productID, quantity: i.quantity, sizeId: i.sizeId || null }));
+//     } else if (productID && quantity) {
+//       itemsArray = [{ productID, quantity, sizeId: sizeId || null }];
+//     } else {
+//       return error(res, "Invalid item format", 400);
+//     }
+
+//     // Add items to cart
+//     await Model.addItems(clientID, itemsArray, sessionID);
+
+//     // Fetch updated cart
+//     const cartItems = sessionID
+//       ? await Model.viewCartBySession(sessionID)
+//       : await Model.viewCart(clientID);
+
+//     // Filter only added items
+//     const addedProducts = cartItems
+//       .filter(item => itemsArray.some(i => i.productID === item.productID && i.sizeId === item.sizeId))
+//       .map(c => ({
+//         productID: c.productID,
+//         description: c.productName,
+//         size: c.size || 'N/A',
+//         qty: c.quantity,
+//         amount: c.price,
+//         total: c.total,
+//         packageID: c.packageID || null
+//       }));
+
+//     return success(res, addedProducts, "Items added to cart successfully");
 //   } catch (e) {
 //     return error(res, e.message, 500);
 //   }
-// }; 10/30
+// }; //new code
 
 export const addItems = async (req, res) => {
   try {
@@ -237,25 +280,72 @@ export const addItems = async (req, res) => {
   }
 };
 
-// Checkout cart
 // export const checkout = async (req, res) => {
 //   try {
-//     const { clientID, paymentType } = req.body;
-//     const staffID = req.user.staffID;
+//     const { clientID = null, sessionID = null, productID = []} = req.body;
+//     const staffID = req.user?.staffID || null;
 
-//     if (!clientID || !paymentType) {
-//       return error(res, "Missing required fields: clientID, paymentType", 400);
+//     if (!clientID && !sessionID) {
+//       return error(res, "Missing required fields: clientID or sessionID", 400);
 //     }
 
-//     const result = await Model.checkout(clientID, paymentType, staffID);
-    
-//     const receipt = await Model.getOrderReceipt(result.orderID);
+//     if (!Array.isArray(productID) || productID.length === 0) {
+//       return error(res, "productID must be a non-empty array", 400);
+//     }
 
-//     return success(res, receipt, "Cart checked out and order created successfully");
+//     // Perform checkout
+//     const receipt = await Model.checkout(clientID, sessionID, staffID, productID);
+
+//     // Build items array with packageID
+//     let itemsArray = [];
+//     let totalAmount = 0;
+
+//     if (receipt.items.length === 0 && receipt.orderID) {
+//       const orderData = await Model.getOrderReceipt(receipt.orderID);
+//       if (orderData && orderData.items.length) {
+//         itemsArray = orderData.items.map(i => ({
+//           productID: i.productID,
+//           description: i.description,
+//           qty: i.qty,
+//           amount: i.amount,
+//           total: i.qty * i.amount,
+//           packageID: i.packageID || null
+//         }));
+//         totalAmount = orderData.total;
+//       }
+//     } else {
+//       const grouped = receipt.items.reduce((acc, item) => {
+//         const key = `${item.productID}`;
+//         if (!acc[key]) {
+//           acc[key] = {
+//             productID: item.productID,
+//             description: item.description,
+//             qty: 0,
+//             amount: item.amount || 0,
+//             total: 0,
+//             packageID: item.packageID || null
+//           };
+//         }
+//         acc[key].qty += item.qty;
+//         acc[key].total += item.total || item.qty * item.amount;
+//         return acc;
+//       }, {});
+//       itemsArray = Object.values(grouped);
+//       totalAmount = itemsArray.reduce((sum, i) => sum + i.total, 0);
+//     }
+
+//     const responseData = {
+//       ...receipt,
+//       items: itemsArray,
+//       totalAmount
+//     };
+
+//     return success(res, responseData, "Checkout successful and order created");
 //   } catch (e) {
 //     return error(res, e.message, 500);
 //   }
-// };
+// }; //new code
+
 export const checkout = async (req, res) => {
   try {
     const { clientID = null, sessionID = null, productID = []} = req.body;
