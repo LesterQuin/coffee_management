@@ -35,9 +35,8 @@ router.get("/:clientID/package/summary", staffAuth, Controller.getClientPackageS
 // Get client all product summary
 router.get("/:clientID/product/summary", staffAuth, Controller.getClientProductSummary)
 // Get package product by date 
-router.get("/:clientID/product/date", staffAuth, Controller.getClientProductDate);
+router.get("/:clientID/product/date", Controller.getClientProductDate);
 // Get Client 
-router.get("/session/info", staffAuth, Controller.getClientSessionInfo);
-
+router.post("/session/info", Controller.getClientSessionInfo);
 
 export default router;
