@@ -41,7 +41,17 @@ export const getStaffByID = async (staffID) => {
 
 // ----------------------POST-------------------------
 // Create a new staff member
-export const createStaff = async ({ firstName, middleInitial, lastName, email, roleId, statusId, passwordHash }) => {
+export const createStaff = async ({
+  firstName,
+  middleInitial,
+  lastName,
+  email,
+  phone,
+  roleId,
+  statusId,
+  passwordHash,
+  refreshToken
+}) => {
   const pool = await poolPromise;
 
   // Validate roleId exists
@@ -56,20 +66,25 @@ export const createStaff = async ({ firstName, middleInitial, lastName, email, r
     .query("SELECT statusId FROM sg.LQ_CSS_status WHERE statusId = @statusId");
   if (!statusRes.recordset[0]) throw new Error(`Invalid statusId: ${statusId}`);
 
-  await pool.request()
+  const result = await pool.request()
     .input("firstName", sql.NVarChar, firstName)
     .input("middleInitial", sql.NVarChar, middleInitial)
     .input("lastName", sql.NVarChar, lastName)
     .input("email", sql.NVarChar, email)
+    .input("phone", sql.NVarChar, phone)
     .input("roleId", sql.Int, roleId)
     .input("statusId", sql.Int, statusId)
     .input("passwordHash", sql.NVarChar, passwordHash)
+    .input("refreshToken", sql.NVarChar, refreshToken)
     .query(`
       INSERT INTO sg.LQ_CSS_staff_accounts
-      (firstName, middleInitial, lastName, email, roleId, statusId, passwordHash, createdAt, updatedAt)
+      (firstName, middleInitial, lastName, email, phone, roleId, statusId, passwordHash, refreshToken, createdAt, updatedAt)
+      OUTPUT inserted.*
       VALUES
-      (@firstName, @middleInitial, @lastName, @email, @roleId, @statusId, @passwordHash, GETDATE(), GETDATE())
+      (@firstName, @middleInitial, @lastName, @email, @phone, @roleId, @statusId, @passwordHash, @refreshToken, GETDATE(), GETDATE())
     `);
+
+  return result.recordset[0]; // <-- return inserted row
 };
 
 // ----------------------PUT-------------------------

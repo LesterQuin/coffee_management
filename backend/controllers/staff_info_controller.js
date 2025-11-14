@@ -4,6 +4,8 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import { success, error } from "../utils/response_helper.js";
+import { generateRefreshToken } from "../utils/token.js";
+
 
 dotenv.config();
 
@@ -37,13 +39,19 @@ export const staffRegister = async (req, res) => {
   try {
     const { firstName, middleInitial, lastName, email, phone, roleId, password, statusId } = req.body;
 
+    // Validate required fields
     if (!firstName || !lastName || !email || !password || !roleId || !statusId) {
       return error(res, "Missing required fields: firstName, lastName, email, password, roleId, or statusId", 400);
     }
 
+    // Hash password
     const hash = await bcrypt.hash(password, 10);
 
-    await Model.createStaff({
+    // Generate refresh token
+    const refreshToken = generateRefreshToken();
+
+    // Insert into DB
+    const staff = await Model.createStaff({
       firstName,
       middleInitial: middleInitial || null,
       lastName,
@@ -51,11 +59,25 @@ export const staffRegister = async (req, res) => {
       phone: phone || null,
       roleId,
       statusId,
-      passwordHash: hash
+      passwordHash: hash,
+      refreshToken       // ⬅ NEW FIELD stored in database
     });
 
-    return success(res, null, "Staff created successfully.");
+    // Success response
+    return success(res, {
+      staffID: staff.staffID,
+      firstName: staff.firstName,
+      middleInitial: staff.middleInitial,
+      lastName: staff.lastName,
+      email: staff.email,
+      phone: staff.phone,
+      roleId: staff.roleId,
+      statusId: staff.statusId,
+      refreshToken: staff.refreshToken   // Return token
+    }, "Staff created successfully.");
+
   } catch (e) {
+    console.error("Error registering staff:", e);
     return error(res, e.message);
   }
 };
