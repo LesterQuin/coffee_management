@@ -15,6 +15,8 @@ router.get("/:staffID", staffAuth, Controller.getStaffByID);
 router.post("/register", Controller.staffRegister);
 // POST /api/staff/login
 router.post("/login", Controller.staffLogin);
+// Refresh token
+router.post("/refresh-token", Controller.refreshStaffToken);
 
 // ----------------------PUT-------------------------
 // Update staff information (role-based validation)

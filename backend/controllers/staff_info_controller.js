@@ -60,7 +60,7 @@ export const staffRegister = async (req, res) => {
       roleId,
       statusId,
       passwordHash: hash,
-      refreshToken       // ⬅ NEW FIELD stored in database
+      refreshToken       
     });
 
     // Success response
@@ -73,7 +73,7 @@ export const staffRegister = async (req, res) => {
       phone: staff.phone,
       roleId: staff.roleId,
       statusId: staff.statusId,
-      refreshToken: staff.refreshToken   // Return token
+      refreshToken: staff.refreshToken  
     }, "Staff created successfully.");
 
   } catch (e) {
@@ -147,5 +147,35 @@ export const deleteStaff = async (req, res) => {
   } catch (err) {
     console.error("Delete staff error:", err);
     res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+export const refreshStaffToken = async (req, res) => {
+  try {
+    const { staffID } = req.body;
+    if (!staffID) return res.status(400).json({ message: "staffID is required" });
+
+    const newToken = generateRefreshToken();
+    const staff = await Model.updateStaffToken(staffID, newToken);
+
+    if (!staff) return res.status(404).json({ message: "Staff not found" });
+
+    return res.status(200).json({
+      message: "Token refreshed successfully",
+      data: {
+        staffID: staff.staffID,
+        firstName: staff.firstName,
+        middleInitial: staff.middleInitial,
+        lastName: staff.lastName,
+        email: staff.email,
+        phone: staff.phone,
+        role: staff.role,       
+        status: staff.status,   
+        token: staff.refreshToken
+      }
+    });
+  } catch (e) {
+    console.error("Error refreshing staff token:", e);
+    return res.status(500).json({ message: "Internal server error", error: e.message });
   }
 };

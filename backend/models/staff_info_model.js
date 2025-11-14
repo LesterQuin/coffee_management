@@ -66,6 +66,7 @@ export const createStaff = async ({
     .query("SELECT statusId FROM sg.LQ_CSS_status WHERE statusId = @statusId");
   if (!statusRes.recordset[0]) throw new Error(`Invalid statusId: ${statusId}`);
 
+  // Insert staff into database
   const result = await pool.request()
     .input("firstName", sql.NVarChar, firstName)
     .input("middleInitial", sql.NVarChar, middleInitial)
@@ -84,7 +85,7 @@ export const createStaff = async ({
       (@firstName, @middleInitial, @lastName, @email, @phone, @roleId, @statusId, @passwordHash, @refreshToken, GETDATE(), GETDATE())
     `);
 
-  return result.recordset[0]; // <-- return inserted row
+  return result.recordset[0]; // return inserted staff
 };
 
 // ----------------------PUT-------------------------
@@ -153,4 +154,36 @@ export const deleteStaffModel = async (staffID) => {
     .input("staffID", sql.Int, staffID)
     .query("DELETE FROM sg.LQ_CSS_staff_accounts WHERE staffID = @staffID");
   return res.rowsAffected[0] > 0;
+};
+
+export const updateStaffToken = async (staffID, newToken) => {
+  const pool = await poolPromise;
+  const result = await pool.request()
+    .input("staffID", sql.Int, staffID)
+    .input("newToken", sql.NVarChar, newToken)
+    .query(`
+      UPDATE sg.LQ_CSS_staff_accounts
+      SET refreshToken = @newToken, updatedAt = GETDATE()
+      OUTPUT inserted.staffID, inserted.firstName, inserted.middleInitial, inserted.lastName,
+             inserted.email, inserted.phone, inserted.roleId, inserted.statusId, inserted.refreshToken
+      WHERE staffID = @staffID
+    `);
+
+  const updatedStaff = result.recordset[0];
+
+  // Join role and status names
+  const joinedResult = await pool.request()
+    .input("staffID", sql.Int, staffID)
+    .query(`
+      SELECT s.staffID, s.firstName, s.middleInitial, s.lastName, s.email, s.phone,
+             r.role AS role,
+             st.status AS status,
+             s.refreshToken
+      FROM sg.LQ_CSS_staff_accounts s
+      INNER JOIN sg.LQ_CSS_roles r ON s.roleId = r.roledId
+      INNER JOIN sg.LQ_CSS_status st ON s.statusId = st.statusId
+      WHERE s.staffID = @staffID
+    `);
+
+  return joinedResult.recordset[0];
 };
