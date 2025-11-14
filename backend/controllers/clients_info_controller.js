@@ -505,3 +505,35 @@ export const getClientProductDate = async (req, res) => {
     return error(res, e.message || "Server error");
   }
 };
+
+export const getClientSessionInfo = async (req, res) => {
+  try {
+    const { token, clientID, sessionID, userName } = req.body;
+
+    if (!token || !clientID || !sessionID || !userName) {
+      return res.status(400).json({
+        message: "Missing required fields: token, clientID, sessionID, userName"
+      });
+    }
+
+    const data = await Model.fetchClientSessionInfo({
+      token,
+      clientID,
+      sessionID,
+      userName
+    });
+
+    if (!data || data.length === 0) {
+      return res.status(404).json({ message: "No session found."});
+    }
+
+    return res.status(200).json(data[0]);
+
+  } catch (e) {
+    console.error("Error fetching client session info:", error);
+    return res.status(500).json({
+      message: "Internal server error",
+      error: error.message
+    });
+  }
+};

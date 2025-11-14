@@ -543,6 +543,33 @@ export const getClientProductByDate = async (clientID, selectedDateTime) => {
   return result.recordset;
 };
 
+export const fetchClientSessionInfo = async ({ clientID, token, sessionID, userName}) => {
+  const pool = await poolPromise;
+
+  const result = await pool.request()
+    .input("clientID", sql.Int, clientID)
+    .input("token", sql.NVarChar(200), token)
+    .input("sessionID", sql.Int, sessionID)
+    .input("userName", sql.NVarChar(150), userName)
+    .query(`
+      SELECT 
+          c.clientID,
+          c.tokenQr AS token,
+          s.sessionID,
+          s.userName
+      FROM [DHUB].[sg].[LQ_CSS_client_info] c
+      INNER JOIN [DHUB].[sg].[LQ_CSS_sessions_info] s
+          ON c.clientID = s.clientID
+      WHERE 
+          c.clientID = @clientID
+          AND c.tokenQr = @token
+          AND s.sessionID = @sessionID
+          AND s.userName = @userName
+    `);
+
+  return result.recordset;
+};
+
 // ---------------------- AUTH helpers -------------------------
 // get client auth fields needed for login/validation
 export const getClientAuthData = async (clientID) => {
