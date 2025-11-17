@@ -1290,8 +1290,37 @@ export const updateClient = async (client) => {
 
 export const deleteClient = async (clientID) => {
   const pool = await poolPromise;
-  await pool.request().input("clientID", sql.Int, clientID).query(`DELETE FROM sg.LQ_CSS_sessions_info WHERE clientID = @clientID`);
-  await pool.request().input("clientID", sql.Int, clientID).query(`DELETE FROM sg.LQ_CSS_client_package_items WHERE clientID = @clientID`);
-  const result = await pool.request().input("clientID", sql.Int, clientID).query(`DELETE FROM sg.LQ_CSS_client_info WHERE clientID = @clientID`);
-  return result.rowsAffected[0] > 0;
+  const transaction = new sql.Transaction(pool);
+
+  try {
+    await transaction.begin();
+
+    // Delete client sessions
+    const sessionResult = await transaction.request()
+      .input("clientID", sql.Int, clientID)
+      .query(`DELETE FROM sg.LQ_CSS_sessions_info WHERE clientID = @clientID`);
+
+    // Delete client package items
+    const packageResult = await transaction.request()
+      .input("clientID", sql.Int, clientID)
+      .query(`DELETE FROM sg.LQ_CSS_client_package_items WHERE clientID = @clientID`);
+
+    // Delete client info
+    const clientResult = await transaction.request()
+      .input("clientID", sql.Int, clientID)
+      .query(`DELETE FROM sg.LQ_CSS_client_info WHERE clientID = @clientID`);
+
+    await transaction.commit();
+
+    return {
+      success: clientResult.rowsAffected[0] > 0,
+      deletedSessions: sessionResult.rowsAffected[0],
+      deletedPackages: packageResult.rowsAffected[0],
+    };
+
+  } catch (err) {
+    await transaction.rollback();
+    console.error("❌ Transaction failed:", err);
+    throw err;
+  }
 };

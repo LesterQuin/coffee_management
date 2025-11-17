@@ -391,15 +391,23 @@ export const deleteClient = async (req, res) => {
     const clientID = parseInt(req.params.clientID, 10);
     if (isNaN(clientID)) return error(res, "Invalid client ID", 400);
 
-    const deleted = await Model.deleteClient(clientID);
-    if (!deleted) return error(res, "Client not found", 404);
-    return success(res, null, "Client deleted successfully");
+    const result = await Model.deleteClient(clientID);
+
+    if (!result.success) return error(res, "Client not found", 404);
+
+    return success(res, result, "Client and all related records deleted successfully");
+
   } catch (err) {
     console.error("❌ Error deleting client:", err);
-    return error(res, "Server error");
+
+    // Optional: handle foreign key error if still occurs
+    if (err.originalError?.number === 547) {
+      return error(res, "Cannot delete client: dependent records exist", 409);
+    }
+
+    return error(res, `Server error: ${err.message}`);
   }
 };
-
 // GET client dashboard (package items + summary)
 export const getClientDashboard = async (req, res) => {
   try {
