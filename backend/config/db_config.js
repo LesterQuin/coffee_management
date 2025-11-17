@@ -25,6 +25,7 @@ export const poolPromise = new sql.ConnectionPool(config)
   })
   .catch(err => {
     console.error(" DB connection failed:", err);
+    process.exit(1);
   });
 
 export { sql };

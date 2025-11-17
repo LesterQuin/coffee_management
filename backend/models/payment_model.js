@@ -1,6 +1,8 @@
 // models/payment_model.js
 import { poolPromise, sql } from "../config/db_config.js";
 
+
+// ----------------------GET-------------------------
 // Get all transactions by client
 export const getTransactionsByClient = async (clientID) => {
   const pool = await poolPromise;
@@ -10,6 +12,7 @@ export const getTransactionsByClient = async (clientID) => {
   return res.recordset;
 };
 
+// ----------------------POST-------------------------
 // Create a new payment transaction
 export const createTransaction = async ({ clientID, orderID, amount, paymentType }) => {
   const pool = await poolPromise;
@@ -25,3 +28,9 @@ export const createTransaction = async ({ clientID, orderID, amount, paymentType
     `);
   return res.recordset?.[0]?.transactionID ?? null;
 };
+
+// ----------------------PUT-------------------------
+
+// ----------------------DELETE-------------------------
+
+

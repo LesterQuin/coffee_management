@@ -1,8 +1,10 @@
 // controllers/chapel_info_controller.js
+import { poolPromise } from "../config/db_config.js";
 import * as Model from "../models/chapel_info_model.js";
 import { success, error } from "../utils/response_helper.js";
 
 
+// ----------------------GET-------------------------
 // Get all chapels
 export const getAllChapels = async (req, res) => {
   try {
@@ -12,6 +14,7 @@ export const getAllChapels = async (req, res) => {
     return error(res, e.message);
   }
 };
+
 // Get all available chapels
 export const listAvailable = async (req, res) => {
   try {
@@ -21,46 +24,67 @@ export const listAvailable = async (req, res) => {
     return error(res, e.message);
   }
 };
+
+// get id package by chapel
+export const listPackagesByChapel = async (req, res) => {
+  const { chapelID } = req.params;
+
+  try {
+    const packages = await Model.listPackagesByChapel(chapelID);
+
+    return res.json({
+      success: true,
+      message: "Packages fetched successfully",
+      data: packages
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch packages",
+      error: error.message
+    });
+  }
+};
+
+
+// ----------------------POST-------------------------
 // Create a new chapel room
 export const create = async (req, res) => {
   try {
-    const { chapelName, description } = req.body;
-    await Model.createChapel(chapelName, description);
-    return success(res, null, "Chapel created");
+    const { chapelName, description, packageID, statusId } = req.body;
+
+    if (!chapelName){
+      return error(res, "ChapelName is required", 400);
+    }
+
+    const chapel = await Model.createChapelWithPackage(chapelName, description, packageID, statusId);
+    return success(res, chapel, "Chapel created successfully");
   } catch (e) {
     return error(res, e.message);
   }
 };
-// Set the status of a chapel room
-export const setStatus = async (req, res) => {
-  try {
-    const { chapelID, status } = req.body;
-    await Model.setChapelStatus(chapelID, status);
-    return success(res, null, "Chapel status updated");
-  } catch (e) {
-    return error(res, e.message);
-  }
-};
+
+// ----------------------PUT-------------------------
 // update chapel details
-export const updateChapel = async(req, res) => {
+export const updateChapel = async (req, res) => {
   const { chapelID } = req.params;
-  const { chapelName, description, status } = req.body;
-
-  console.log("Updating chapel ID:", chapelID);
-  console.log("Payload:", { chapelName, description, status });
+  const { chapelName, description, packageID, statusId } = req.body;
 
   try {
-    const updated = await Model.updateChapel(chapelID, chapelName, description, status);
+    const updated = await Model.updateChapel(chapelID, chapelName, description, statusId, packageID);
 
     if (!updated) {
       return res.status(404).json({ success: false, message: "Chapel not found or no fields to update" });
     }
     return res.json({ success: true, message: "Chapel updated successfully" });
   } catch (e) {
-    console.error("Update chapel DB error:", e);
+    console.error("❌ Update chapel DB error:", e);
     return res.status(500).json({ success: false, message: e.message });
   }
 };
+
+// ----------------------DELETE-------------------------
 // delete
 export const deleteChapel = async (req, res) => {
   const { chapelID } = req.params;
@@ -69,7 +93,7 @@ export const deleteChapel = async (req, res) => {
     if (!result) return res.status(404).json({ success: false, message: "Chapel not found" });
     res.json({ success: true, message: "Chapel deleted successfully" });
   } catch (err) {
-    console.error("Delete chapel error:", err);
+    console.error("❌ Delete chapel error:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };

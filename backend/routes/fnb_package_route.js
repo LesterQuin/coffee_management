@@ -1,13 +1,15 @@
+// routes/fnb_package_route.js
 import express from "express";
+import * as Package from "../controllers/fnb_package_controller.js";
 import { staffAuth } from "../middleware/auth_middleware.js";
-//import ReportsController from "../controllers/reports_controller.js";
-import { getStatistics } from "../controllers/reports_controller.js";
 
 const router = express.Router();
 
 // ----------------------GET-------------------------
-// Fetch order statistics
-router.get("/statistics", staffAuth, getStatistics);
+// Scan QR (get client package + allowed menu)
+router.get("/scan/:pin", Package.getClientPackageByPin);
+// Get menu items by package ID
+router.get("/menu/:packageID", Package.getMenuByPackage);
 
 // ----------------------POST-------------------------
 

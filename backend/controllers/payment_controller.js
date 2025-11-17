@@ -2,6 +2,7 @@
 import * as Payment from "../models/payment_model.js";
 import { success, error } from "../utils/response_helper.js";
 
+// ----------------------GET-------------------------
 // Get transactions for a client
 export const getTransactions = async (req, res) => {
   try {
@@ -13,6 +14,7 @@ export const getTransactions = async (req, res) => {
   }
 };
 
+// ----------------------POST-------------------------
 // Create a new payment transaction
 export const createTransaction = async (req, res) => {
   try {
@@ -23,3 +25,10 @@ export const createTransaction = async (req, res) => {
     return error(res, e.message);
   }
 };
+
+// ----------------------PUT-------------------------
+
+// ----------------------DELETE-------------------------
+
+
+
