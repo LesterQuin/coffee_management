@@ -69,11 +69,15 @@ export const create = async (req, res) => {
 // update chapel details
 export const updateChapel = async (req, res) => {
   const { chapelID } = req.params;
+
+  if (!req.body) {
+    return res.status(400).json({ success: false, message: "Request body is missing" });
+  }
+
   const { chapelName, description, packageID, statusId } = req.body;
 
   try {
     const updated = await Model.updateChapel(chapelID, chapelName, description, statusId, packageID);
-
     if (!updated) {
       return res.status(404).json({ success: false, message: "Chapel not found or no fields to update" });
     }

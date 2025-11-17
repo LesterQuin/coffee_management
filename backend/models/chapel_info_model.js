@@ -151,7 +151,7 @@ export const updateChapel = async (chapelID, chapelName, description, statusId, 
   const updates = [];
 
   if (chapelName !== undefined && chapelName !== "") updates.push("chapelName = @chapelName");
-  if (description !== undefined && description !== "") updates.push("description = @description");
+  if (description !== undefined ) updates.push("description = @description");
   if (statusId !== undefined && statusId !== "") updates.push("statusId = @statusId");
   if (packageID !== undefined) updates.push("packageID = @packageID");
 
@@ -166,7 +166,7 @@ export const updateChapel = async (chapelID, chapelName, description, statusId, 
   const request = pool.request().input("chapelID", sql.Int, chapelID);
 
   if (chapelName !== undefined && chapelName !== "") request.input("chapelName", sql.NVarChar, chapelName);
-  if (description !== undefined && description !== "") request.input("description", sql.NVarChar, description);
+  if (description !== undefined ) request.input("description", sql.NVarChar, description);
   if (statusId !== undefined && statusId !== "") request.input("statusId", sql.Int, statusId);
   if (packageID !== undefined) request.input("packageID", sql.Int, packageID);
 
