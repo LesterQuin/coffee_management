@@ -102,7 +102,7 @@ export const deleteRole = async (roleId) => {
 export const getAllStatus = async () => {
   const pool = await poolPromise;
   const result = await pool.request().query(`
-    SELECT statusId, status, CreatedAt
+    SELECT statusId, status, category, CreatedAt
     FROM sg.LQ_CSS_status
     ORDER BY CreatedAt DESC
   `);
