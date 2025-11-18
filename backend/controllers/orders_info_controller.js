@@ -92,6 +92,15 @@ export const getStatusBySession = async (req, res) => {
   }
 };
 
+export const getAllActiveOrders = async (req, res) => {
+  try {
+    const orders = await Model.fetchAllActiveOrders();
+    return success(res, { count: orders.length, orders });
+  } catch (e) {
+    return error(res, e.message, 500);
+  }
+};
+
 // ----------------------POST-------------------------
 // Place a new order
 export const placeOrder = async (req, res) => {

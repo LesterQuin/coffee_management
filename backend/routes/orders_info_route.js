@@ -20,6 +20,8 @@ router.get("/order/:orderID", Controller.getOrderById);
 router.get("/status-logs", Controller.getOrderStatusLogs);
 // Get order by SessionID
 router.get("/:sessionID/status-logs", Controller.getStatusBySession);
+//get all order with processesing and pending  
+router.get("/all/pending-processing", Controller.getAllActiveOrders);
 
 // ----------------------POST-------------------------
 // Order routes

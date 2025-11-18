@@ -359,6 +359,33 @@ export const getStatusBySession = async (sessionID) => {
   return res.recordset;
 }
 
+export const fetchAllActiveOrders = async () => {
+  const pool = await poolPromise;
+
+  const query = `
+    SELECT 
+          o.orderID,
+          o.sessionID,
+          o.clientID,
+          o.status AS orderStatus,
+            -- client fields
+          c.packageNo,
+          c.chapelID,
+
+          o.createdAt,
+          o.updatedAt
+      FROM [DHUB].[sg].[LQ_CSS_fnb_orders] o
+      LEFT JOIN [DHUB].[sg].[LQ_CSS_client_info] c
+          ON o.clientID = c.clientID
+      WHERE o.status IN ('Pending', 'Processing')
+      ORDER BY o.createdAt DESC;
+  `;
+
+  const result = await pool.request().query(query);
+  return result.recordset;
+};
+
+
 // ----------------------POST-------------------------
 // Place an order (optional, you can skip if using cart checkout)
 export const placeOrder = async (clientID = null, sessionID = null) => {
