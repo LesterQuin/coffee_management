@@ -252,18 +252,43 @@ export const createPackage = async (pkg) => {
 
 export const updatePackage = async (packageID, pkg) => {
   const pool = await poolPromise;
-  await pool.request()
-    .input("packageID", sql.Int, packageID)
-    .input("packageName", sql.NVarChar(100), pkg.packageName)
-    .input("description", sql.NVarChar(255), pkg.description ?? null)
-    .input("totalValue", sql.Decimal(18,2), pkg.totalValue)
-    .input("quantity", sql.Int, pkg.quantity)
-    .query(`
-      UPDATE sg.LQ_CSS_fnb_packages
-      SET packageName=@packageName, description=@description, 
-      totalValue=@totalValue, quantity=@quantity, updatedAt=GETDATE()
-      WHERE packageID=@packageID
-    `);
+
+  // Build dynamic SQL SET clause
+  const fields = [];
+  const request = pool.request();
+
+  if (pkg.packageName !== undefined) {
+    fields.push("packageName = @packageName");
+    request.input("packageName", sql.NVarChar(100), pkg.packageName);
+  }
+
+  if (pkg.description !== undefined) {
+    fields.push("description = @description");
+    request.input("description", sql.NVarChar(255), pkg.description ?? null);
+  }
+
+  if (pkg.totalValue !== undefined) {
+    fields.push("totalValue = @totalValue");
+    request.input("totalValue", sql.Decimal(18,2), pkg.totalValue);
+  }
+
+  if (pkg.quantity !== undefined) {
+    fields.push("quantity = @quantity");
+    request.input("quantity", sql.Int, pkg.quantity);
+  }
+
+  // Always update timestamp
+  fields.push("updatedAt = GETDATE()");
+
+  const setClause = fields.join(", ");
+
+  request.input("packageID", sql.Int, packageID);
+
+  await request.query(`
+    UPDATE sg.LQ_CSS_fnb_packages
+    SET ${setClause}
+    WHERE packageID = @packageID
+  `);
 };
 
 export const deletePackage = async (packageID) => {

@@ -139,20 +139,22 @@ export const createPackage = async (req, res) => {
 
 export const updatePackage = async (req, res) => {
   try {
-    const { packageName, description, totalValue, quantity } = req.body;
     const { packageID } = req.params;
+    const updates = req.body;
 
-    if (!packageName || !totalValue || quantity === undefined) {
-      return res.status(400).json({ error: "packageName, totalValue, and quantity are required" });
+    // No fields provided
+    if (!updates || Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: "At least one field is required to update." });
     }
 
-    await Model.updatePackage(packageID, { packageName, description, totalValue, quantity });
-    res.status(200).json({ message: "Package updated successfully" });
+    await Model.updatePackage(packageID, updates);
 
+    res.status(200).json({ message: "Package updated successfully" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
+
 
 export const deletePackage = async (req, res) => {
   try {

@@ -33,7 +33,7 @@ router.get("/packages", staffAuth, Controller.listPackages);
 // Create a new package
 router.post("/packages", staffAuth, Controller.createPackage);
 // Update package
-router.put("/packages/:packageID", staffAuth, Controller.updatePackage);
+router.patch("/packages/:packageID", staffAuth, Controller.updatePackage);
 // Delete package
 router.delete("/packages/:packageID", staffAuth, Controller.deletePackage);
 
