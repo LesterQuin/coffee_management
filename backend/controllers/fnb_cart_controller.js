@@ -165,6 +165,7 @@ export const viewCartSession = async (req, res) => {
         acc[key] = {
           productID: item.productID,
           productName: item.productName,
+          categoryName: item.categoryName,
           size: item.size || 'N/A',
           sizeId: item.sizeId || null,
           packageID: item.packageID || null,
