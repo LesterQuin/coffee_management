@@ -42,33 +42,32 @@ export const viewCartBySession = async (sessionID) => {
     .input("sessionID", sql.Int, sessionID)
     .query(`
       SELECT 
-    i.cartItemID, 
-    i.productID, 
-    p.categoryID,
-    categoryInfo.categoryName, 
-    p.productName, 
-    i.quantity AS qty,
-    p.price,
-    producSize.size,
-    i.sizeId,
-    i.packageID,
-    fp.packageName,
-    (i.quantity * p.price) AS total
-FROM sg.LQ_CSS_fnb_cart_items i
-INNER JOIN sg.LQ_CSS_fnb_cart c ON i.cartID = c.cartID
-INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
-LEFT JOIN sg.LQ_CSS_fnb_categories AS categoryInfo
-    ON p.categoryID = categoryInfo.categoryID
-LEFT JOIN sg.LQ_CSS_product_sizes AS producSize
-    ON p.sizeId = producSize.sizeId
-LEFT JOIN sg.LQ_CSS_fnb_packages AS fp
-    ON i.packageID = fp.packageID
-WHERE c.sessionID = @sessionID
-ORDER BY i.cartItemID;
-    `);
-  return res.recordset;
-};
-
+          i.cartItemID, 
+          i.productID, 
+          p.categoryID,
+          categoryInfo.categoryName, 
+          p.productName, 
+          i.quantity AS qty,
+          p.price,
+          producSize.size,
+          i.sizeId,
+          i.packageID,
+          fp.packageName,
+          (i.quantity * p.price) AS total
+      FROM sg.LQ_CSS_fnb_cart_items i
+      INNER JOIN sg.LQ_CSS_fnb_cart c ON i.cartID = c.cartID
+      INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
+      LEFT JOIN sg.LQ_CSS_fnb_categories AS categoryInfo
+          ON p.categoryID = categoryInfo.categoryID
+      LEFT JOIN sg.LQ_CSS_product_sizes AS producSize
+          ON p.sizeId = producSize.sizeId
+      LEFT JOIN sg.LQ_CSS_fnb_packages AS fp
+          ON i.packageID = fp.packageID
+      WHERE c.sessionID = @sessionID
+      ORDER BY i.cartItemID;
+          `);
+        return res.recordset;
+      };
 
 // View all
 export const viewAllCarts = async () => {
@@ -209,7 +208,7 @@ export const addItems = async (clientID, items, sessionID) => {
         .input("packageID", sql.Int, packageID)
         .query(`
           IF EXISTS (SELECT 1 FROM sg.LQ_CSS_fnb_cart_items 
-                     WHERE cartID = @cartID AND productID = @productID AND sizeId = @sizeId)
+                    WHERE cartID = @cartID AND productID = @productID AND sizeId = @sizeId)
             UPDATE sg.LQ_CSS_fnb_cart_items 
             SET quantity = quantity + @quantity, packageID = @packageID
             WHERE cartID = @cartID AND productID = @productID AND sizeId = @sizeId
@@ -497,11 +496,11 @@ export const checkout = async (clientID = null, sessionID = null, staffID = null
       .input("orderID", sql.Int, orderID)
       .query(`
         SELECT p.productID,
-               p.productName AS description,
-               i.quantity AS qty,
-               p.price AS amount,
+              p.productName AS description,
+              i.quantity AS qty,
+              p.price AS amount,
                (i.quantity * p.price) AS total,
-               i.packageID
+              i.packageID
         FROM sg.LQ_CSS_fnb_order_items i
         INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
         WHERE i.orderID = @orderID
