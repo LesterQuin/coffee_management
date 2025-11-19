@@ -83,6 +83,33 @@ export const staffRegister = async (req, res) => {
 };
 
 // ----------------------POST LOGIN-------------------------
+// export const staffLogin = async (req, res) => {
+//   try {
+//     const { email, password } = req.body;
+//     const staff = await Model.getStaffByEmail(email);
+//     if (!staff) return error(res, "Invalid credentials", 400);
+
+//     const ok = await bcrypt.compare(password, staff.passwordHash);
+//     if (!ok) return error(res, "Invalid credentials", 400);
+
+//     const token = jwt.sign(
+//       {
+//         staffID: staff.staffID,
+//         email: staff.email,
+//         roleId: staff.roleId,
+//         statusId: staff.statusId
+//       },
+//       process.env.JWT_SECRET,
+//       { expiresIn: "12h" }
+//     );
+
+//     const { passwordHash, ...staffData } = staff;
+//     return success(res, { token, staff: staffData }, "Login Successful");
+//   } catch (e) {
+//     return error(res, e.message);
+//   }
+// }; // old code
+
 export const staffLogin = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -92,7 +119,7 @@ export const staffLogin = async (req, res) => {
     const ok = await bcrypt.compare(password, staff.passwordHash);
     if (!ok) return error(res, "Invalid credentials", 400);
 
-    const token = jwt.sign(
+    const accessToken = jwt.sign(
       {
         staffID: staff.staffID,
         email: staff.email,
@@ -100,14 +127,35 @@ export const staffLogin = async (req, res) => {
         statusId: staff.statusId
       },
       process.env.JWT_SECRET,
-      { expiresIn: "12h" }
+      { expiresIn: '15m' }
     );
 
+    const refreshToken = jwt.sign(
+      {
+        staffID: staff.staffID,
+      },
+      process.env.JWT_REFRESH_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    await Model.updateStaffToken(staff.staffID, accessToken, refreshToken);
     const { passwordHash, ...staffData } = staff;
-    return success(res, { token, staff: staffData }, "Login Successful");
+    return success(res, { accessToken , staff: staffData }, "Login Successful");
   } catch (e) {
     return error(res, e.message);
   }
+};
+
+export const staffLogout = async (req, res) => {
+    try {
+        const { staffID } = req.body;
+        if (!staffID) return res.status(400).json({ message: "staffID is required" });
+
+        await Model.updateStaffToken(staffID, null, null);
+        return res.status(200).json({ message: "Logged out successfully" });
+    } catch (e) {
+        return res.status(500).json({ message: "Internal server error", error: e.message });
+    }
 };
 
 // ----------------------PUT-------------------------
@@ -152,26 +200,52 @@ export const deleteStaff = async (req, res) => {
 
 export const refreshStaffToken = async (req, res) => {
   try {
-    const { staffID } = req.body;
+    const { staffID } = req.body || {};
     if (!staffID) return res.status(400).json({ message: "staffID is required" });
 
-    const newToken = generateRefreshToken();
-    const staff = await Model.updateStaffToken(staffID, newToken);
+    const staffInfo = await Model.getStaffByID(staffID);
+    console.log("staffInfo: ", staffInfo)
+    if (!staffInfo) {
+      return res.status(404).json({ message: "Staff not found" });
+    }
 
-    if (!staff) return res.status(404).json({ message: "Staff not found" });
+    try {
+      jwt.verify(staffInfo.refreshToken, process.env.JWT_REFRESH_SECRET);
+    } catch {
+      return res.status(403).json({ message: "Expired refresh token" });
+    }
+
+    const newAccessToken = jwt.sign(
+      {
+        staffID: staffInfo.staffID,
+        email: staffInfo.email,
+        roleId: staffInfo.roleId,
+        statusId: staffInfo.statusId
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "15m" }
+    );
+
+    const updatedStaff = await Model.updateStaffToken(
+      staffInfo.staffID,
+      newAccessToken,
+      staffInfo.refreshToken
+    );
+
+    if (!updatedStaff) return res.status(404).json({ message: "Staff not found" });
 
     return res.status(200).json({
       message: "Token refreshed successfully",
       data: {
-        staffID: staff.staffID,
-        firstName: staff.firstName,
-        middleInitial: staff.middleInitial,
-        lastName: staff.lastName,
-        email: staff.email,
-        phone: staff.phone,
-        role: staff.role,       
-        status: staff.status,   
-        token: staff.refreshToken
+        staffID: updatedStaff.staffID,
+        firstName: updatedStaff.firstName,
+        middleInitial: updatedStaff.middleInitial,
+        lastName: updatedStaff.lastName,
+        email: updatedStaff.email,
+        phone: updatedStaff.phone,
+        role: updatedStaff.role,
+        status: updatedStaff.status,
+        accessToken: newAccessToken
       }
     });
   } catch (e) {

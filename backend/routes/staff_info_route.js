@@ -17,6 +17,8 @@ router.post("/register", Controller.staffRegister);
 router.post("/login", Controller.staffLogin);
 // Refresh token
 router.post("/refresh-token", Controller.refreshStaffToken);
+// Logout
+router.post("/logout", Controller. staffLogout);
 
 // ----------------------PUT-------------------------
 // Update staff information (role-based validation)

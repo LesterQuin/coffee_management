@@ -156,16 +156,17 @@ export const deleteStaffModel = async (staffID) => {
   return res.rowsAffected[0] > 0;
 };
 
-export const updateStaffToken = async (staffID, newToken) => {
+export const updateStaffToken = async (staffID, newAccessToken, newRefreshToken) => {
   const pool = await poolPromise;
   const result = await pool.request()
     .input("staffID", sql.Int, staffID)
-    .input("newToken", sql.NVarChar, newToken)
+    .input("newAccessToken", sql.NVarChar, newAccessToken)
+    .input("newRefreshToken", sql.NVarChar, newRefreshToken)
     .query(`
       UPDATE sg.LQ_CSS_staff_accounts
-      SET refreshToken = @newToken, updatedAt = GETDATE()
+      SET accessToken = @newAccessToken, refreshToken  = @newRefreshToken, updatedAt = GETDATE()
       OUTPUT inserted.staffID, inserted.firstName, inserted.middleInitial, inserted.lastName,
-             inserted.email, inserted.phone, inserted.roleId, inserted.statusId, inserted.refreshToken
+            inserted.email, inserted.phone, inserted.roleId, inserted.statusId, inserted.refreshToken
       WHERE staffID = @staffID
     `);
 
