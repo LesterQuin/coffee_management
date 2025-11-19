@@ -328,6 +328,30 @@ export const checkout = async (clientID = null, sessionID = null, staffID = null
     }
     if (!clientID) throw new Error("Cannot resolve clientID or sessionID");
 
+    // HARD VALIDATION: Check remainingQty before ANY checkout
+    const qtyCheckRes = await transaction.request()
+      .input("clientID", sql.Int, clientID)
+      .query(`
+        SELECT remainingQty
+        FROM sg.LQ_CSS_client_packages
+        WHERE clientID = @clientID
+      `);
+
+    // If client has no packages
+    if (qtyCheckRes.recordset.length === 0) {
+      throw new Error("Your package has no remaining quantity. Please ask the cashier to add more package credits.");
+    }
+
+    // Calculate total remaining quantity across all packages
+    const totalRemaining = qtyCheckRes.recordset
+      .map(r => r.remainingQty)
+      .reduce((sum, q) => sum + q, 0);
+
+    // If total remaining is zero → block checkout
+    if (totalRemaining <= 0) {
+      throw new Error("Your package has no remaining quantity. Please ask the cashier to add more package credits.");
+    }
+
     const productIDsString = productIDs?.map(id => parseInt(id, 10)).join(',') || null;
 
     // Fetch cart items
@@ -361,16 +385,20 @@ export const checkout = async (clientID = null, sessionID = null, staffID = null
     for (const item of cartItems) {
       const packageID = await getPackageID(transaction, clientID, item.productID, item.quantity);
 
-      // Deduct package quantity
-      await transaction.request()
+      // Deduct package quantity with validation
+      const updateRes = await transaction.request()
         .input("clientID", sql.Int, clientID)
         .input("packageID", sql.Int, packageID)
         .input("quantity", sql.Int, item.quantity)
         .query(`
           UPDATE sg.LQ_CSS_client_packages
           SET remainingQty = remainingQty - @quantity
-          WHERE clientID = @clientID AND packageID = @packageID
+          WHERE clientID = @clientID AND packageID = @packageID AND remainingQty >= @quantity
         `);
+
+      if (updateRes.rowsAffected[0] === 0) {
+        throw new Error(`Insufficient stock`);
+      }
 
       // Log consumption
       await transaction.request()
@@ -438,7 +466,8 @@ export const checkout = async (clientID = null, sessionID = null, staffID = null
     await transaction.rollback();
     throw new Error(err.message);
   }
-}; //new code
+};
+ //new code
 
 // export const checkout = async (clientID = null, sessionID = null, staffID = null, productIDs = null) => {
 //   const pool = await poolPromise;
@@ -632,6 +661,33 @@ export const updateItem = async (clientID, sessionID, productID, quantity, sizeI
   }
 };
 
+export const updatePackageItemQuantity = async (packageID, itemId, updates) => {
+  const pool = await poolPromise;
+  const request = pool.request();
+
+  const fields = [];
+
+  if (updates.quantity !== undefined) {
+    fields.push("quantity = @quantity");
+    request.input("quantity", sql.Int, Number(updates.quantity));
+  }
+
+  fields.push("updatedAt = GETDATE()");
+
+  const setClause = fields.join(", ");
+
+  request
+    .input("packageID", sql.Int, packageID)
+    .input("itemId", sql.Int, itemId);
+
+  const result = await request.query(`
+    UPDATE sg.LQ_CSS_fnb_package_items
+    SET ${setClause}
+    WHERE packageID = @packageID AND itemId = @itemId
+  `);
+
+  return result;
+};
 
 // ----------------------DELETE-------------------------
 // Remove item from cart

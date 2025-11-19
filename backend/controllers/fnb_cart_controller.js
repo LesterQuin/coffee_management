@@ -411,10 +411,19 @@ export const checkout = async (req, res) => {
     };
 
     return success(res, responseData, "Checkout successful and order created");
+
   } catch (e) {
-    return error(res, e.message, 500);
+    // Catch the custom remainingQty message from the model
+    if (e.message.includes("Your package has no remaining quantity")) {
+      return error(res, e.message, 400); // client error
+    }
+    if (e.message.includes("Not enough quantity")) {
+      return error(res, e.message, 400); // client error for other packages
+    }
+    return error(res, e.message, 500); // server error
   }
 };
+
 
 // ----------------------PUT-------------------------
 // Update item quantity or size
