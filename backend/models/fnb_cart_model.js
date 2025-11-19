@@ -311,7 +311,6 @@ export const addItems = async (clientID, items, sessionID) => {
 //   return true;
 // };
 
-
 export const checkout = async (clientID = null, sessionID = null, staffID = null, productIDs = null) => {
   const pool = await poolPromise;
   const transaction = new sql.Transaction(pool);
@@ -319,114 +318,169 @@ export const checkout = async (clientID = null, sessionID = null, staffID = null
   try {
     await transaction.begin();
 
-    // Resolve clientID from sessionID if needed
+    // Resolve clientID from sessionID if missing
     if (!clientID && sessionID) {
-      const clientRes = await transaction.request()
+      const clientRes = await new sql.Request(transaction)
         .input("sessionID", sql.Int, sessionID)
-        .query(`SELECT clientID FROM sg.LQ_CSS_sessions_info WHERE sessionID = @sessionID`);
+        .query(`
+          SELECT clientID 
+          FROM sg.LQ_CSS_sessions_info 
+          WHERE sessionID = @sessionID
+        `);
+
       clientID = clientRes.recordset[0]?.clientID || null;
     }
+
     if (!clientID) throw new Error("Cannot resolve clientID or sessionID");
 
-    // HARD VALIDATION: Check remainingQty before ANY checkout
-    const qtyCheckRes = await transaction.request()
+    // --- CLEANUP: fix any existing negative remainingQty for this client ---
+    await new sql.Request(transaction)
       .input("clientID", sql.Int, clientID)
       .query(`
-        SELECT remainingQty
-        FROM sg.LQ_CSS_client_packages
-        WHERE clientID = @clientID
+        UPDATE sg.LQ_CSS_client_packages
+        SET remainingQty = 0
+        WHERE clientID = @clientID AND remainingQty < 0
       `);
 
-    // If client has no packages
-    if (qtyCheckRes.recordset.length === 0) {
-      throw new Error("Your package has no remaining quantity. Please ask the cashier to add more package credits.");
+    // Validate productIDs input
+    if (!Array.isArray(productIDs) || productIDs.length === 0) {
+      throw new Error("productIDs must be a non-empty array");
     }
 
-    // Calculate total remaining quantity across all packages
-    const totalRemaining = qtyCheckRes.recordset
-      .map(r => r.remainingQty)
-      .reduce((sum, q) => sum + q, 0);
-
-    // If total remaining is zero → block checkout
-    if (totalRemaining <= 0) {
-      throw new Error("Your package has no remaining quantity. Please ask the cashier to add more package credits.");
-    }
-
-    const productIDsString = productIDs?.map(id => parseInt(id, 10)).join(',') || null;
-
-    // Fetch cart items
-    const cartQuery = `
-      SELECT i.cartItemID, i.productID, i.quantity, i.sizeId
-      FROM sg.LQ_CSS_fnb_cart_items i
-      INNER JOIN sg.LQ_CSS_fnb_cart c ON i.cartID = c.cartID
-      WHERE (c.clientID = @clientID OR c.sessionID = @sessionID)
-      ${productIDsString ? `AND i.productID IN (${productIDsString})` : ""}
-    `;
-    const cartRes = await transaction.request()
+    // Get cart items (only the requested products)
+    const ids = productIDs.map(Number).join(",");
+    const cartRes = await new sql.Request(transaction)
       .input("clientID", sql.Int, clientID)
       .input("sessionID", sql.Int, sessionID)
-      .query(cartQuery);
+      .query(`
+        SELECT i.cartItemID, i.productID, i.quantity, i.sizeId
+        FROM sg.LQ_CSS_fnb_cart_items i
+        INNER JOIN sg.LQ_CSS_fnb_cart c ON i.cartID = c.cartID
+        WHERE (c.clientID = @clientID OR c.sessionID = @sessionID)
+          AND i.productID IN (${ids})
+      `);
+
     const cartItems = cartRes.recordset;
     if (!cartItems.length) throw new Error("Cart is empty");
 
     // Create new order
-    const orderInsert = await transaction.request()
+    const orderInsert = await new sql.Request(transaction)
       .input("clientID", sql.Int, clientID)
       .input("sessionID", sql.Int, sessionID)
       .input("staffID", sql.Int, staffID)
       .query(`
-        INSERT INTO sg.LQ_CSS_fnb_orders (clientID, status, createdAt, updatedAt, staffID, sessionID)
+        INSERT INTO sg.LQ_CSS_fnb_orders 
+          (clientID, status, createdAt, updatedAt, staffID, sessionID)
         OUTPUT INSERTED.orderID
         VALUES (@clientID, 'Pending', GETDATE(), GETDATE(), @staffID, @sessionID)
       `);
+
     const orderID = orderInsert.recordset[0].orderID;
 
-    // Process cart items
+    // For each item in cart, deduct across packages (oldest first)
     for (const item of cartItems) {
-      const packageID = await getPackageID(transaction, clientID, item.productID, item.quantity);
+      let remainingToDeduct = Number(item.quantity);
 
-      // Deduct package quantity with validation
-      const updateRes = await transaction.request()
+      // Fetch all packages that contain this product and have remaining > 0
+      // Use row-level update lock to avoid race conditions
+      const pkgRes = await new sql.Request(transaction)
         .input("clientID", sql.Int, clientID)
-        .input("packageID", sql.Int, packageID)
-        .input("quantity", sql.Int, item.quantity)
+        .input("productID", sql.Int, item.productID)
         .query(`
-          UPDATE sg.LQ_CSS_client_packages
-          SET remainingQty = remainingQty - @quantity
-          WHERE clientID = @clientID AND packageID = @packageID AND remainingQty >= @quantity
+          SELECT p.clientPackageId, p.packageID, p.remainingQty
+          FROM sg.LQ_CSS_client_packages p WITH (ROWLOCK, UPDLOCK)
+          INNER JOIN sg.LQ_CSS_client_package_items i 
+            ON p.packageID = i.packageID
+          WHERE p.clientID = @clientID
+            AND i.productID = @productID
+            AND p.remainingQty > 0
+          ORDER BY p.createdAt ASC
         `);
 
-      if (updateRes.rowsAffected[0] === 0) {
-        throw new Error(`Insufficient stock`);
+      const packages = pkgRes.recordset;
+
+      // quick total-available check
+      const totalAvailable = packages.reduce((s, px) => s + Number(px.remainingQty), 0);
+      if (totalAvailable < remainingToDeduct) {
+        throw new Error(`Not enough quantity, Please contact cashier for add more stocks.`);
       }
 
-      // Log consumption
-      await transaction.request()
-        .input("clientID", sql.Int, clientID)
-        .input("packageID", sql.Int, packageID)
-        .input("productID", sql.Int, item.productID)
-        .input("quantity", sql.Int, item.quantity)
-        .query(`
-          INSERT INTO sg.LQ_CSS_client_consumption_log
-          (clientID, packageID, productID, quantity, consumedFrom, createdAt)
-          VALUES (@clientID, @packageID, @productID, @quantity, 'checkout', GETDATE())
-        `);
+      // Iterate packages and deduct only up to available per package
+      for (const pkg of packages) {
+        if (remainingToDeduct <= 0) break;
 
-      // Insert into order items with packageID
-      await transaction.request()
-        .input("orderID", sql.Int, orderID)
-        .input("productID", sql.Int, item.productID)
-        .input("quantity", sql.Int, item.quantity)
-        .input("sizeId", sql.Int, item.sizeId || null)
-        .input("packageID", sql.Int, packageID)
-        .query(`
-          INSERT INTO sg.LQ_CSS_fnb_order_items (orderID, productID, quantity, sizeId, packageID)
-          VALUES (@orderID, @productID, @quantity, @sizeId, @packageID)
-        `);
-    }
+        const deductQty = Math.min(Number(pkg.remainingQty), remainingToDeduct);
+
+        // Attempt safe update: only succeed if remainingQty still >= deductQty
+        const updReq = new sql.Request(transaction);
+        const updateRes = await updReq
+          .input("clientPackageId", sql.Int, pkg.clientPackageId)
+          .input("deductQty", sql.Int, deductQty)
+          .query(`
+            UPDATE sg.LQ_CSS_client_packages
+            SET remainingQty = remainingQty - @deductQty
+            WHERE clientPackageId = @clientPackageId
+              AND remainingQty >= @deductQty;
+
+            SELECT remainingQty
+            FROM sg.LQ_CSS_client_packages
+            WHERE clientPackageId = @clientPackageId;
+          `);
+
+        // updateRes.recordset[0] corresponds to SELECT remainingQty result
+        const afterRow = updateRes.recordset && updateRes.recordset.length ? updateRes.recordset[0] : null;
+
+        // If update didn't affect any row (race or insufficient), try next package
+        // rowsAffected[0] indicates number of rows affected by UPDATE
+        const rowsAffected = (updateRes.rowsAffected && updateRes.rowsAffected.length) ? updateRes.rowsAffected[0] : 0;
+        if (rowsAffected === 0) {
+          // Another concurrent checkout may have consumed this package; continue to next package
+          // Re-fetch next packages (optional) — but we will just continue with the next pkg in the local list
+          continue;
+        }
+
+        // Confirm remainingQty didn't go negative (safety)
+        const newQty = afterRow ? Number(afterRow.remainingQty) : null;
+        if (newQty !== null && newQty < 0) {
+          throw new Error(`Package ${pkg.clientPackageId} went negative — aborting.`);
+        }
+
+        // Log consumption for this portion
+        await new sql.Request(transaction)
+          .input("clientID", sql.Int, clientID)
+          .input("packageID", sql.Int, pkg.packageID)
+          .input("productID", sql.Int, item.productID)
+          .input("quantity", sql.Int, deductQty)
+          .query(`
+            INSERT INTO sg.LQ_CSS_client_consumption_log
+              (clientID, packageID, productID, quantity, consumedFrom, createdAt)
+            VALUES (@clientID, @packageID, @productID, @quantity, 'checkout', GETDATE())
+          `);
+
+        // Insert order item for this portion
+        await new sql.Request(transaction)
+          .input("orderID", sql.Int, orderID)
+          .input("productID", sql.Int, item.productID)
+          .input("quantity", sql.Int, deductQty)
+          .input("sizeId", sql.Int, item.sizeId)
+          .input("packageID", sql.Int, pkg.packageID)
+          .query(`
+            INSERT INTO sg.LQ_CSS_fnb_order_items
+              (orderID, productID, quantity, sizeId, packageID)
+            VALUES (@orderID, @productID, @quantity, @sizeId, @packageID)
+          `);
+
+        remainingToDeduct -= deductQty;
+      } // end packages loop
+
+      if (remainingToDeduct > 0) {
+        // If somehow still remaining (concurrent races), throw and rollback
+        throw new Error(`Not enough total quantity for product`);
+      }
+    } // end cartItems loop
 
     // Clear cart
-    await transaction.request()
+    await new sql.Request(transaction)
       .input("clientID", sql.Int, clientID)
       .input("sessionID", sql.Int, sessionID)
       .query(`
@@ -443,22 +497,21 @@ export const checkout = async (clientID = null, sessionID = null, staffID = null
       .input("orderID", sql.Int, orderID)
       .query(`
         SELECT p.productID,
-              p.productName AS description,
-              i.quantity AS qty,
-              p.price AS amount,
-              (i.quantity * p.price) AS total
+               p.productName AS description,
+               i.quantity AS qty,
+               p.price AS amount,
+               (i.quantity * p.price) AS total,
+               i.packageID
         FROM sg.LQ_CSS_fnb_order_items i
         INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
         WHERE i.orderID = @orderID
       `);
 
-    const totalAmount = itemsRes.recordset.reduce((sum, i) => sum + i.total, 0);
-
     return {
       orderID,
       orderStatus: "Pending",
       items: itemsRes.recordset,
-      totalAmount,
+      totalAmount: itemsRes.recordset.reduce((s, x) => s + x.total, 0),
       handledByStaffID: staffID
     };
 
@@ -467,7 +520,8 @@ export const checkout = async (clientID = null, sessionID = null, staffID = null
     throw new Error(err.message);
   }
 };
- //new code
+
+//new code
 
 // export const checkout = async (clientID = null, sessionID = null, staffID = null, productIDs = null) => {
 //   const pool = await poolPromise;

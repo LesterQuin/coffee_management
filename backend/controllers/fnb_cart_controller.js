@@ -364,26 +364,11 @@ export const checkout = async (req, res) => {
     // Perform checkout
     const receipt = await Model.checkout(clientID, sessionID, staffID, productID);
 
-    // Initialize items array and total
+    // Group items by productID + packageID
     let itemsArray = [];
     let totalAmount = 0;
 
-    if ((receipt.items?.length || 0) === 0 && receipt.orderID) {
-      // Fetch from order if cart is empty after checkout
-      const orderData = await Model.getOrderReceipt(receipt.orderID);
-      if (orderData && orderData.items.length) {
-        itemsArray = orderData.items.map(i => ({
-          productID: i.productID,
-          description: i.description,
-          qty: i.qty,
-          amount: i.amount,
-          total: i.qty * i.amount,
-          packageID: i.packageID || null  // include packageID here
-        }));
-        totalAmount = orderData.total;
-      }
-    } else {
-      // Group items by productID + packageID
+    if ((receipt.items?.length || 0) > 0) {
       const grouped = receipt.items.reduce((acc, item) => {
         const key = `${item.productID}_${item.packageID || 'null'}`;
         if (!acc[key]) {
@@ -413,16 +398,14 @@ export const checkout = async (req, res) => {
     return success(res, responseData, "Checkout successful and order created");
 
   } catch (e) {
-    // Catch the custom remainingQty message from the model
-    if (e.message.includes("Your package has no remaining quantity")) {
-      return error(res, e.message, 400); // client error
+    // Handle custom errors
+    if (e.message.includes("Not enough quantity") || e.message.includes("Your package has no remaining quantity")) {
+      return error(res, e.message, 400);
     }
-    if (e.message.includes("Not enough quantity")) {
-      return error(res, e.message, 400); // client error for other packages
-    }
-    return error(res, e.message, 500); // server error
+    return error(res, e.message, 500);
   }
 };
+
 
 
 // ----------------------PUT-------------------------
