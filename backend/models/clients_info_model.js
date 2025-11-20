@@ -901,8 +901,9 @@ validToStr = `${scheduleToDateObj.getFullYear()}-${pad(scheduleToDateObj.getMont
 export const generateQrDataUrl = async (payload) => {
   if (!payload || !payload.tokenQr) throw new Error("tokenQr required for QR");
 
-  // Replace with your front-end login URL
-  const loginUrl = `http://192.168.50.26:3000/login?token=${encodeURIComponent(payload.tokenQr)}`;
+  // Replace with your front-end login URLhttps://heritage.capitalbrew.com.ph
+  // const loginUrl = `http://192.168.50.26:3000/login?token=${encodeURIComponent(payload.tokenQr)}`;
+  const loginUrl = `https://heritage.capitalbrew.com.ph/login?token=${encodeURIComponent(payload.tokenQr)}`;
 
   return QRCode.toDataURL(loginUrl, { 
     errorCorrectionLevel: 'H', 
