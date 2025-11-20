@@ -413,6 +413,40 @@ export const addPackageItem = async (packageID, productID) => {
   }
 };
 
+export const updatePackageItemQuantity = async (packageID, itemId, updates) => {
+  const pool = await poolPromise;
+
+  // Build dynamic SET clause based on updates object
+  const fields = [];
+  if (updates.quantity !== undefined) fields.push(`quantity = @quantity`);
+  if (updates.productID !== undefined) fields.push(`productID = @productID`);
+
+  if (fields.length === 0) {
+    return { success: false, message: "No valid fields to update" };
+  }
+
+  const query = `
+    UPDATE sg.LQ_CSS_fnb_package_items
+    SET ${fields.join(", ")}
+    WHERE packageID = @packageID AND packageItemID = @itemId
+  `;
+
+  const request = pool.request()
+    .input("packageID", sql.Int, packageID)
+    .input("itemId", sql.Int, itemId);
+
+  if (updates.quantity !== undefined) request.input("quantity", sql.Int, updates.quantity);
+  if (updates.productID !== undefined) request.input("productID", sql.Int, updates.productID);
+
+  const result = await request.query(query);
+
+  if (result.rowsAffected[0] === 0) {
+    return { success: false, message: "No item found or nothing updated" };
+  }
+
+  return { success: true, message: "Package item updated successfully" };
+};
+
 export const deletePackageItem = async (packageItemID) => {
   const pool = await poolPromise;
   await pool.request()
@@ -580,3 +614,96 @@ export const canUpdatePackageItem = async (packageID, packageItemID, newQuantity
   };
 };
 
+// export const addPackageItemNoQuantity = async (packageID, productID) => {
+//   const pool = await poolPromise;
+
+//   // Check if package exists
+//   const pkgRes = await pool.request()
+//     .input("packageID", sql.Int, packageID)
+//     .query("SELECT packageID FROM sg.LQ_CSS_fnb_packages WHERE packageID=@packageID");
+
+//   if (!pkgRes.recordset.length) throw new Error("Package not found");
+
+//   // Check if product already exists in package
+//   const existingRes = await pool.request()
+//     .input("packageID", sql.Int, packageID)
+//     .input("productID", sql.Int, productID)
+//     .query("SELECT packageItemID FROM sg.LQ_CSS_fnb_package_items WHERE packageID=@packageID AND productID=@productID");
+
+//   if (existingRes.recordset.length > 0) {
+//     return { merged: true, packageItemID: existingRes.recordset[0].packageItemID };
+//   }
+
+//   // Insert without quantity
+//   const insertRes = await pool.request()
+//     .input("packageID", sql.Int, packageID)
+//     .input("productID", sql.Int, productID)
+//     .query(`
+//       INSERT INTO sg.LQ_CSS_fnb_package_items (packageID, productID)
+//       VALUES (@packageID, @productID);
+//       SELECT SCOPE_IDENTITY() AS packageItemID;
+//     `);
+
+//   return { merged: false, packageItemID: insertRes.recordset[0].packageItemID };
+// };
+
+
+// export const getProductById = async (productID) => {
+//   const pool = await poolPromise;
+//   const res = await pool.request()
+//     .input("productID", sql.Int, productID)
+//     .query(`
+//       SELECT 
+//         p.productID, p.productName, p.description, p.price, 
+//         p.sizeId, s.size, p.image, p.isAvailable,
+//         c.categoryID, c.categoryName
+//       FROM sg.LQ_CSS_fnb_products p
+//       INNER JOIN sg.LQ_CSS_fnb_categories c 
+//         ON p.categoryID = c.categoryID
+//       LEFT JOIN sg.LQ_CSS_product_sizes s 
+//         ON p.sizeId = s.sizeId
+//       WHERE p.productID = @productID
+//     `);
+
+//   return res.recordset[0] || null;
+// };
+
+export const updatePackageProducts = async (packageID, products) => {
+  const pool = await poolPromise;
+  const productIDs = products.map(p => p.productID);
+
+  if (productIDs.length === 0) {
+    await pool.request()
+      .input("packageID", sql.Int, packageID)
+      .query("DELETE FROM sg.LQ_CSS_fnb_package_items WHERE packageID=@packageID");
+    return { success: true, message: "All package items deleted" };
+  }
+
+  // Insert new items if not exists
+  const insertQuery = `
+    INSERT INTO sg.LQ_CSS_fnb_package_items (packageID, productID, quantity)
+    SELECT @packageID, np.productID, 1
+    FROM ( ${productIDs.map((id, i) => `SELECT @productID${i} AS productID`).join(" UNION ALL ")} ) AS np
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM sg.LQ_CSS_fnb_package_items AS p
+      WHERE p.packageID = @packageID
+        AND p.productID = np.productID
+    );
+  `;
+  const insertRequest = pool.request().input("packageID", sql.Int, packageID);
+  productIDs.forEach((id, i) => insertRequest.input(`productID${i}`, sql.Int, id));
+  await insertRequest.query(insertQuery);
+
+  // Delete items not in the new list
+  const deleteQuery = `
+    DELETE FROM sg.LQ_CSS_fnb_package_items
+    WHERE packageID = @packageID
+      AND productID NOT IN (${productIDs.map((_, i) => `@productID${i}`).join(",")});
+  `;
+  const deleteRequest = pool.request().input("packageID", sql.Int, packageID);
+  productIDs.forEach((id, i) => deleteRequest.input(`productID${i}`, sql.Int, id));
+  await deleteRequest.query(deleteQuery);
+
+  return { success: true, message: "Package products updated successfully" };
+};

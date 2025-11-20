@@ -229,15 +229,27 @@ export const addPackageItem = async (req, res) => {
 export const updatePackageItem = async (req, res) => {
   try {
     const { packageID, itemId } = req.params;
-    const { quantity } = req.body;
+    const updates = req.body;
 
-    if (!packageID || !itemId || quantity === undefined || Number(quantity) < 0) {
-      return error(res, "packageID, itemId and non-negative quantity are required", 400);
+    if (!packageID || !itemId) {
+      return error(res, "packageID and itemId are required", 400);
     }
 
-    const result = await Model.updatePackageItemQuantity(packageID, itemId, Number(quantity));
+    if (!updates || Object.keys(updates).length === 0) {
+      return error(res, "At least one field is required to update.", 400);
+    }
 
-    return success(res, result, "Package item quantity updated successfully");
+    // If quantity is present, validate it
+    if (updates.quantity !== undefined) {
+      const qty = Number(updates.quantity);
+      if (isNaN(qty) || qty < 0) {
+        return error(res, "quantity must be a non-negative number", 400);
+      }
+    }
+
+    const result = await Model.updatePackageItemQuantity(packageID, itemId, updates);
+
+    return success(res, result, "Package item updated successfully");
   } catch (e) {
     console.error("❌ updatePackageItem error:", e);
     return error(res, e.message || "Internal server error");
@@ -297,5 +309,94 @@ export const consumePackageItemController = async (req, res) => {
   } catch (err) {
     console.error("❌ consumePackageItem error:", err);
     return error(res, err.message || "Failed to consume package item");
+  }
+};
+
+// export const managePackageItem = async (req, res) => {
+//   try {
+//     const { packageID } = req.params;
+//     const { action, productID, products, packageItemID } = req.body;
+
+//     if (!packageID) return error(res, "packageID is required", 400);
+
+//     switch (action) {
+//       case "add":
+//         // Accept either a single productID or array of products
+//         const productsToAdd = Array.isArray(products) 
+//           ? products 
+//           : productID 
+//             ? [{ productID }] 
+//             : [];
+
+//         if (!productsToAdd.length) return error(res, "At least one product is required to add", 400);
+
+//         // Fetch existing package items
+//         const existingItemsRes = await Model.getPackageItems(packageID);
+//         if (!existingItemsRes.success) return error(res, existingItemsRes.message, 400);
+//         const existingItems = existingItemsRes.data.items;
+
+//         const results = [];
+
+//         for (const prod of productsToAdd) {
+//           if (!prod.productID) continue; // skip invalid product
+
+//           // Skip if product already exists
+//           if (existingItems.some(item => item.productID === prod.productID)) continue;
+
+//           // Add product
+//           const addResult = await Model.addPackageItem(packageID, prod.productID);
+//           results.push({ productID: prod.productID, packageItemID: addResult.packageItemID });
+//         }
+
+//         if (!results.length) return error(res, "No new products were added (all already exist)", 400);
+
+//         const updatedPackage = await Model.getPackageItems(packageID);
+//         return success(res, { results, updatedPackage }, "Products added to package successfully");
+
+//       case "remove":
+//         if (!packageItemID) return error(res, "packageItemID is required to remove", 400);
+//         const remove = await removePackageItemByID(packageItemID);
+//         return success(res, remove, "Product removed from package successfully");
+
+//       default:
+//         return error(res, "Invalid action. Must be add or remove.", 400);
+//     }
+//   } catch (e) {
+//     console.error("❌ managePackageItem error:", e);
+//     return error(res, e.message || "Internal server error", 500);
+//   }
+// };
+
+// const removePackageItemByID = async (packageItemID) => {
+//   if (!packageItemID) throw new Error("packageItemID is required to remove");
+
+//   const item = await Model.getPackageItemById(packageItemID);
+//   if (!item) throw new Error("❌ Package item not found");
+
+//   await Model.deletePackageItem(packageItemID);
+
+//   return { packageItemID };
+// };
+
+export const updatePackageProductsController = async (req, res) => {
+  try {
+    const { packageId, products } = req.body;
+
+    if (!packageId || !Array.isArray(products)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid request body"
+      });
+    }
+
+    const result = await Model.updatePackageProducts(packageId, products);
+
+    return res.json(result);
+  } catch (err) {
+    console.error("Controller Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
   }
 };

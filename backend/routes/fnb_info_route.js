@@ -47,6 +47,9 @@ router.put("/packages/:packageID/items/:itemId", staffAuth, Controller.updatePac
 // Delete a specific item from a specific package
 router.delete("/packages/:packageID/items/:itemId", staffAuth, Controller.deletePackageItem);
 
+// Add, update, or remove a product in a package
+//router.post("/packages/:packageID/items/manage", Controller.managePackageItem);
+router.put("/packages/items/products", Controller.updatePackageProductsController);
 
 // Consume a product from a package (e.g., when ordered)
 router.post("/packages/consume", staffAuth, Controller.consumePackageItemController);
