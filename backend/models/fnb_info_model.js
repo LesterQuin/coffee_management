@@ -150,7 +150,7 @@ export const createProduct = async (product) => {
     .input("description", sql.NVarChar(255), product.description ?? null)
     .input("price", sql.Decimal(18,2), product.price)
     .input("sizeId", sql.Int, product.sizeId ?? null)
-    .input("image", sql.NVarChar(255), product.image ?? null)
+    .input("image", sql.NVarChar(sql.MAX), product.image ?? null)
     .input("isAvailable", sql.Bit, product.isAvailable ?? 1)
     .query(`
       INSERT INTO sg.LQ_CSS_fnb_products
@@ -172,7 +172,7 @@ export const updateProduct = async (productID, product) => {
     price: sql.Decimal(18, 2),
     sizeId: sql.Int,
     isAvailable: sql.Bit,
-    image: sql.NVarChar(255),
+    image: sql.NVarChar(sql.MAX),
   };
 
   const fields = [];

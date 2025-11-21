@@ -514,6 +514,7 @@ export const getClientProductByDate = async (clientID, selectedDateTime) => {
         s.size,
         p.categoryID,
         c.categoryName,
+		p.image,
         MIN(cp.packageName) AS packageName, -- take one package name
         MIN(cp.validFrom) AS validFrom,
         MAX(cp.validTo) AS validTo,
@@ -536,7 +537,8 @@ export const getClientProductByDate = async (clientID, selectedDateTime) => {
         p.price,
         s.size,
         p.categoryID,
-        c.categoryName
+        c.categoryName,
+		p.image 
     ORDER BY cpi.productID;
     `);
 
