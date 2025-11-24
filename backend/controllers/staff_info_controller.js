@@ -114,7 +114,13 @@ export const staffLogin = async (req, res) => {
   try {
     const { email, password } = req.body;
     const staff = await Model.getStaffByEmail(email);
+
     if (!staff) return error(res, "Invalid credentials", 400);
+
+    // 🔒 Block inactive accounts
+    if (staff.statusId === 2) {
+      return error(res, "Account is inactive. Please contact administrator.", 403);
+    }
 
     const ok = await bcrypt.compare(password, staff.passwordHash);
     if (!ok) return error(res, "Invalid credentials", 400);
@@ -131,20 +137,22 @@ export const staffLogin = async (req, res) => {
     );
 
     const refreshToken = jwt.sign(
-      {
-        staffID: staff.staffID,
-      },
+      { staffID: staff.staffID },
       process.env.JWT_REFRESH_SECRET,
       { expiresIn: '7d' }
     );
 
     await Model.updateStaffToken(staff.staffID, accessToken, refreshToken);
+
     const { passwordHash, ...staffData } = staff;
-    return success(res, { accessToken , staff: staffData }, "Login Successful");
+
+    return success(res, { accessToken, staff: staffData }, "Login Successful");
+
   } catch (e) {
     return error(res, e.message);
   }
 };
+
 
 export const staffLogout = async (req, res) => {
     try {

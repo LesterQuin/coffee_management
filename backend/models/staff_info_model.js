@@ -20,15 +20,20 @@ export const getStaffByEmail = async (email) => {
     .request()
     .input("email", sql.NVarChar, email)
     .query(`
-      SELECT s.staffID, s.firstName, s.middleInitial, s.lastName, s.email, s.phone,
-             r.role AS role, st.status AS status, s.passwordHash, s.createdAt, s.updatedAt
+      SELECT 
+        s.staffID, s.firstName, s.middleInitial, s.lastName, s.email, s.phone,
+        r.role AS role, st.status AS status, s.passwordHash, 
+        s.createdAt, s.updatedAt,
+        s.roleId, s.statusId
       FROM sg.LQ_CSS_staff_accounts s
       INNER JOIN sg.LQ_CSS_roles r ON s.roleId = r.roledId
       INNER JOIN sg.LQ_CSS_status st ON s.statusId = st.statusId
-      WHERE s.email = @email AND st.status = 'Active'
+      WHERE s.email = @email
     `);
+
   return result.recordset[0];
 };
+
 
 // Get staff by ID
 export const getStaffByID = async (staffID) => {
