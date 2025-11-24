@@ -25,15 +25,15 @@ router.get("/all/pending-processing", Controller.getAllActiveOrders);
 
 // ----------------------POST-------------------------
 // Order routes
-router.post("/place", Controller.placeOrder);
+router.post("/place", staffAuth, Controller.placeOrder);
 
 // ----------------------PUT-------------------------
 // Update order status
-router.put("/status/:orderID", Controller.updateOrderStatus);
+router.put("/status/:orderID", staffAuth, Controller.updateOrderStatus);
 // Canceled order by orderID
-router.put("/cancel/session/:orderID", Controller.cancelOrderBySession);
+router.put("/cancel/session/:orderID", staffAuth, Controller.cancelOrderBySession);
 // Update order status
-router.put("/status", Controller.updateStatus);
+router.put("/status", staffAuth, Controller.updateStatus);
 
 // ----------------------DELETE-------------------------
 // Cancel order (only if pending)
