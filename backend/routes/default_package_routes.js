@@ -8,7 +8,7 @@ const router = express.Router();
 router.get("/", Controller.getDefaultPackage);
 
 // Public: get default package details + items (uses latest row)
-router.get("/items", Controller.getDefaultPackageItems);
+router.get("/items", staffAuth, Controller.getDefaultPackageItems);
 
 // Protected: change (set) default package (inserts a new default row)
 router.put("/:packageID", staffAuth, Controller.setDefaultPackage);

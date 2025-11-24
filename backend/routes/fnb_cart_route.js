@@ -9,9 +9,9 @@ const router = express.Router();
 // view all carts
 router.get("/", staffAuth, Cart.viewAllCarts);
 // view cart items for a client
-router.get("/view/:clientID", Cart.viewCart);
+router.get("/view/:clientID", staffAuth, Cart.viewCart);
 // view cart items for a sessionID
-router.get("/view/session/:sessionID", Cart.viewCartSession);
+router.get("/view/session/:sessionID", staffAuth, Cart.viewCartSession);
 
 // ----------------------POST-------------------------
 // add Cart item

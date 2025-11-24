@@ -8,10 +8,10 @@ const router = express.Router();
 
 // ----------------------GET-------------------------
 // Fetch order statistics
-router.get("/statistics", getStatistics);
+router.get("/statistics", staffAuth, getStatistics);
 // Get reports order
 //router.get("/session-orders", Controller, getSessionOrder);
-router.get("/session-orders", getSessionOrder);
+router.get("/session-orders", staffAuth, getSessionOrder);
 
 // ----------------------POST-------------------------
 

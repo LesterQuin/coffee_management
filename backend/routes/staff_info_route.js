@@ -12,13 +12,13 @@ router.get("/:staffID", staffAuth, Controller.getStaffByID);
 
 // ----------------------POST-------------------------
 // POST /api/staff/register
-router.post("/register", Controller.staffRegister);
+router.post("/register", staffAuth, Controller.staffRegister);
 // POST /api/staff/login
 router.post("/login", Controller.staffLogin);
 // Refresh token
-router.post("/refresh-token", Controller.refreshStaffToken);
+router.post("/refresh-token", staffAuth, Controller.refreshStaffToken);
 // Logout
-router.post("/logout", Controller. staffLogout);
+router.post("/logout", staffAuth, Controller. staffLogout);
 
 // ----------------------PUT-------------------------
 // Update staff information (role-based validation)

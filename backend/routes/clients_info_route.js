@@ -24,7 +24,7 @@ router.put("/:clientID", staffAuth, Controller.update);
 router.put("/:clientID/balance", staffAuth, Controller.raiseBalance);
 // ----------------------DELETE-------------------------
 // Delete client by ID
-router.delete("/:clientID", Controller.deleteClient);
+router.delete("/:clientID", staffAuth, Controller.deleteClient);
 // ----------------------Summary-------------------------
 // Client dashboard with package items & summary
 router.get("/:clientID/dashboard", staffAuth, Controller.getClientDashboard);
@@ -35,8 +35,8 @@ router.get("/:clientID/package/summary", staffAuth, Controller.getClientPackageS
 // Get client all product summary
 router.get("/:clientID/product/summary", staffAuth, Controller.getClientProductSummary)
 // Get package product by date 
-router.get("/:clientID/product/date", Controller.getClientProductDate);
+router.get("/:clientID/product/date", staffAuth, Controller.getClientProductDate);
 // Get Client 
-router.post("/session/info", Controller.getClientSessionInfo);
+router.post("/session/info", staffAuth, Controller.getClientSessionInfo);
 
 export default router;
