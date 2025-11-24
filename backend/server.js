@@ -5,14 +5,12 @@ import { sql, poolPromise } from "./config/db_config.js"; // optional if you sti
 
 dotenv.config();
 
-// Optional: You can still keep your DB test here if desired
-// But app.js already defines routes like /api/staff, /api/chapel, etc.
-
 const PORT = process.env.LOCAL_SERVER_PORT || 5000;
 
 // Health check for the server (kept simple)
 app.get("/api/hello", (req, res) => {
   res.json({ message: "Hello world! it's working" });
+  res.send(JSON.stringify({ message: "Hello world! it's working" }));
 });
 
 // Optional: Quick DB version test route

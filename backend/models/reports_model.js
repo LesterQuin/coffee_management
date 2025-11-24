@@ -66,26 +66,30 @@ const ReportsModel = {
     const pool = await poolPromise;
     const res = await pool.request().query(`
       SELECT 
-          s.sessionID,
-          s.clientID,
-          s.userName,
-          s.role,
-          s.createdAt AS sessionCreated,
-          o.orderID,
-          o.status AS orderStatus,
-          o.createdAt AS orderCreated,
-          oi.orderItemID,
-          p.productName,
-          ps.size AS productSize,
-          oi.quantity,
-          p.price,
-          (oi.quantity * p.price) AS totalPrice
-      FROM sg.LQ_CSS_sessions_info AS s
-      LEFT JOIN sg.LQ_CSS_fnb_orders AS o ON o.sessionID = s.sessionID
-      LEFT JOIN sg.LQ_CSS_fnb_order_items AS oi ON oi.orderID = o.orderID
-      LEFT JOIN sg.LQ_CSS_fnb_products AS p ON p.productID = oi.productID
-      LEFT JOIN sg.LQ_CSS_product_sizes AS ps ON ps.sizeId = p.sizeId
-      ORDER BY s.userName, o.createdAt, oi.orderItemID
+        s.sessionID,
+        s.clientID,
+        c.deceasedName,
+        s.userName,
+        s.role,
+        s.createdAt AS sessionCreated,
+        o.orderID,
+        o.status AS orderStatus,
+        o.createdAt AS orderCreated,
+        oi.orderItemID,
+        p.productName,
+        ps.size AS productSize,
+        oi.quantity,
+        p.price,
+        (oi.quantity * p.price) AS totalPrice,
+        ch.chapelName
+    FROM sg.LQ_CSS_sessions_info AS s
+    LEFT JOIN sg.LQ_CSS_client_info AS c ON c.clientID = s.clientID
+    LEFT JOIN sg.LQ_CSS_chapel_rooms AS ch ON ch.chapelID = c.chapelID
+    LEFT JOIN sg.LQ_CSS_fnb_orders AS o ON o.sessionID = s.sessionID
+    LEFT JOIN sg.LQ_CSS_fnb_order_items AS oi ON oi.orderID = o.orderID
+    LEFT JOIN sg.LQ_CSS_fnb_products AS p ON p.productID = oi.productID
+    LEFT JOIN sg.LQ_CSS_product_sizes AS ps ON ps.sizeId = p.sizeId
+    ORDER BY s.userName, o.createdAt, oi.orderItemID
     `);
 
     const rows = res.recordset || [];
@@ -96,8 +100,10 @@ const ReportsModel = {
         sessionsMap[row.sessionID] = {
           sessionID: row.sessionID,
           clientID: row.clientID,
+          deceasedName: row.deceasedName,
           userName: row.userName,
           role: row.role,
+          chapelName: row.chapelName,
           sessionCreated: row.sessionCreated,
           orders: {}
         };
