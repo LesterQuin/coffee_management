@@ -70,23 +70,45 @@ export const create = async (req, res) => {
 export const updateChapel = async (req, res) => {
   const { chapelID } = req.params;
 
-  if (!req.body) {
-    return res.status(400).json({ success: false, message: "Request body is missing" });
+  if (!req.body || Object.keys(req.body).length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: "Request body is empty"
+    });
   }
 
   const { chapelName, description, packageID, statusId } = req.body;
 
   try {
-    const updated = await Model.updateChapel(chapelID, chapelName, description, statusId, packageID);
+    const updated = await Model.updateChapel(
+      chapelID,
+      chapelName,
+      description,
+      statusId,
+      packageID
+    );
+
+    // Model returns TRUE if rows affected > 0, otherwise FALSE
     if (!updated) {
-      return res.status(404).json({ success: false, message: "Chapel not found or no fields to update" });
+      return res.status(404).json({
+        success: false,
+        message: "Chapel not found or no fields to update"
+      });
     }
-    return res.json({ success: true, message: "Chapel updated successfully" });
+
+    return res.json({
+      success: true,
+      message: "Chapel updated successfully"
+    });
   } catch (e) {
     console.error("❌ Update chapel DB error:", e);
-    return res.status(500).json({ success: false, message: e.message });
+    return res.status(500).json({
+      success: false,
+      message: e.message
+    });
   }
 };
+
 
 // ----------------------DELETE-------------------------
 // delete
