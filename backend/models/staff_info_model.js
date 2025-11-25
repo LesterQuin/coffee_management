@@ -182,9 +182,9 @@ export const updateStaffToken = async (staffID, newAccessToken, newRefreshToken)
     .input("staffID", sql.Int, staffID)
     .query(`
       SELECT s.staffID, s.firstName, s.middleInitial, s.lastName, s.email, s.phone,
-             r.role AS role,
-             st.status AS status,
-             s.refreshToken
+              r.role AS role,
+              st.status AS status,
+              s.refreshToken
       FROM sg.LQ_CSS_staff_accounts s
       INNER JOIN sg.LQ_CSS_roles r ON s.roleId = r.roledId
       INNER JOIN sg.LQ_CSS_status st ON s.statusId = st.statusId
@@ -192,4 +192,37 @@ export const updateStaffToken = async (staffID, newAccessToken, newRefreshToken)
     `);
 
   return joinedResult.recordset[0];
+};
+
+export const getStaffByToken = async (refreshToken) => {
+  const pool = await poolPromise;
+  const res = await pool.request()
+    .input("refreshToken", sql.VarChar, refreshToken)
+    .query("SELECT * FROM sg.LQ_CSS_staff_accounts WHERE refreshToken = @refreshToken");
+  return res.recordset[0];
+};
+
+export const getGuestByToken = async (refreshToken) => {
+  const pool = await poolPromise;
+  const res = await pool.request()
+    .input("refreshToken", sql.VarChar, refreshToken)
+    .query(`
+      SELECT 
+      s.sessionID,
+      s.clientID,
+      s.userName,
+      s.pin,
+      s.qrDataUrl,
+      s.expires_at,
+      s.createdAt,
+      s.updatedAt,
+      s.role,
+      s.accessToken,
+      s.refreshToken,
+      c.tokenQr
+FROM sg.LQ_CSS_sessions_info s
+LEFT JOIN sg.LQ_CSS_client_info c
+    ON s.clientID = c.clientID
+      WHERE refreshToken = @refreshToken`);
+  return res.recordset[0];
 };

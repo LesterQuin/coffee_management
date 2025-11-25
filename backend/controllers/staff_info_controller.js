@@ -142,6 +142,13 @@ export const staffLogin = async (req, res) => {
       { expiresIn: '7d' }
     );
 
+    res.cookie('staffJwt', refreshToken, { 
+        httpOnly: true, 
+        secure: false,  // secure: true,
+        sameSite: 'None', 
+         maxAge: 24 * 60 * 60 * 1000 
+    });
+
     await Model.updateStaffToken(staff.staffID, accessToken, refreshToken);
 
     const { passwordHash, ...staffData } = staff;
@@ -152,7 +159,6 @@ export const staffLogin = async (req, res) => {
     return error(res, e.message);
   }
 };
-
 
 export const staffLogout = async (req, res) => {
     try {
@@ -208,56 +214,108 @@ export const deleteStaff = async (req, res) => {
 
 export const refreshStaffToken = async (req, res) => {
   try {
-    const { staffID } = req.body || {};
-    if (!staffID) return res.status(400).json({ message: "staffID is required" });
+    const cookies = req.cookies;
+    console.log("Cookies:", req.cookies);
 
-    const staffInfo = await Model.getStaffByID(staffID);
-    console.log("staffInfo: ", staffInfo)
-    if (!staffInfo) {
-      return res.status(404).json({ message: "Staff not found" });
+    const oldStaffToken = cookies?.staffJwt;
+    const oldGuestToken = cookies?.guestJwt;
+
+    if (!oldStaffToken && !oldGuestToken) {
+      return res.status(400).json({ message: "Token is required" });
     }
 
+    let user, userType;
+
+    if (oldStaffToken) {
+      user = await Model.getStaffByToken(oldStaffToken);
+      userType = "staff";
+    } else if (oldGuestToken) {
+      user = await Model.getGuestByToken(oldGuestToken);
+      userType = "guest";
+    }
+
+    if (!user || !userType) {
+      return res.status(403).json({ message: "Invalid refresh token" });
+    }
+
+    const secret = process.env.JWT_REFRESH_SECRET;
+    if (!secret) return res.status(500).json({ message: "Server misconfiguration: JWT secret missing" });
+
+    // Verify refresh token
     try {
-      jwt.verify(staffInfo.refreshToken, process.env.JWT_REFRESH_SECRET);
+      jwt.verify(userType === "staff" ? oldStaffToken : oldGuestToken, secret);
     } catch {
       return res.status(403).json({ message: "Expired refresh token" });
     }
 
+    // Create new access token
     const newAccessToken = jwt.sign(
-      {
-        staffID: staffInfo.staffID,
-        email: staffInfo.email,
-        roleId: staffInfo.roleId,
-        statusId: staffInfo.statusId
-      },
+      userType === "staff"
+        ? { staffID: user.staffID, email: user.email, roleId: user.roleId, statusId: user.statusId }
+        : { sessionID: user.sessionID, clientID: user.clientID, userName: user.userName },
       process.env.JWT_SECRET,
       { expiresIn: "15m" }
     );
 
-    const updatedStaff = await Model.updateStaffToken(
-      staffInfo.staffID,
-      newAccessToken,
-      staffInfo.refreshToken
+    // Create new refresh token
+    const refreshToken = jwt.sign(
+      userType === "staff" ? { staffID: user.staffID } : { sessionID: user.sessionID },
+      secret,
+      { expiresIn: "7d" }
     );
 
-    if (!updatedStaff) return res.status(404).json({ message: "Staff not found" });
+    // Update DB and set cookie
+    if (userType === "staff") {
+      const updatedStaff = await Model.updateStaffToken(user.staffID, newAccessToken, refreshToken);
+      if (!updatedStaff) return res.status(404).json({ message: "Staff not found" });
 
-    return res.status(200).json({
-      message: "Token refreshed successfully",
-      data: {
-        staffID: updatedStaff.staffID,
-        firstName: updatedStaff.firstName,
-        middleInitial: updatedStaff.middleInitial,
-        lastName: updatedStaff.lastName,
-        email: updatedStaff.email,
-        phone: updatedStaff.phone,
-        role: updatedStaff.role,
-        status: updatedStaff.status,
-        accessToken: newAccessToken
-      }
-    });
+      res.cookie("staffJwt", refreshToken, {
+        httpOnly: true,
+        secure: false,  // secure: true,  
+        sameSite: "None",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      });
+
+      return res.status(200).json({
+        message: "Token refreshed successfully",
+        data: {
+          staffID: updatedStaff.staffID,
+          firstName: updatedStaff.firstName,
+          middleInitial: updatedStaff.middleInitial,
+          lastName: updatedStaff.lastName,
+          email: updatedStaff.email,
+          phone: updatedStaff.phone,
+          role: updatedStaff.role,
+          status: updatedStaff.status,
+          accessToken: newAccessToken,
+        },
+      });
+    }
+
+    if (userType === "guest") {
+      const updatedGuest = await Model.updateGuestToken(user.sessionID, newAccessToken, refreshToken);
+      if (!updatedGuest) return res.status(404).json({ message: "Guest not found" });
+
+      res.cookie("guestJwt", refreshToken, {
+        httpOnly: true,
+        secure: false,  // secure: true,
+        sameSite: "None",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      });
+
+      return res.status(200).json({
+        message: "Token refreshed successfully",
+        data: {
+          token: updatedGuest.sessionID,
+          userName: updatedGuest.userName,
+          sessionID: updatedGuest.sessionID,
+          clientID: updatedGuest.clientID,
+          accessToken: newAccessToken,
+        },
+      });
+    }
   } catch (e) {
-    console.error("Error refreshing staff token:", e);
+    console.error("Error refreshing token:", e);
     return res.status(500).json({ message: "Internal server error", error: e.message });
   }
 };

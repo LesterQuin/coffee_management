@@ -1,6 +1,7 @@
 import express from "express";
 import * as Controller from "../controllers/staff_info_controller.js";
 import { staffAuth } from "../middleware/auth_middleware.js";
+import { loginLimiter } from "../middleware/limiter.js";
 
 const router = express.Router();
 
@@ -14,11 +15,11 @@ router.get("/:staffID", staffAuth, Controller.getStaffByID);
 // POST /api/staff/register
 router.post("/register", staffAuth, Controller.staffRegister);
 // POST /api/staff/login
-router.post("/login", Controller.staffLogin);
+router.post("/login", loginLimiter, Controller.staffLogin);
 // Refresh token
-router.post("/refresh-token", staffAuth, Controller.refreshStaffToken);
+router.post("/refresh-token", Controller.refreshStaffToken);
 // Logout
-router.post("/logout", staffAuth, Controller. staffLogout);
+router.post("/logout", staffAuth, Controller.staffLogout);
 
 // ----------------------PUT-------------------------
 // Update staff information (role-based validation)
