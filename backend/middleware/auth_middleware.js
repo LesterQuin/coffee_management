@@ -8,13 +8,15 @@ dotenv.config();
  * Expects Authorization header: "Bearer <token>"
  */
 export const staffAuth = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return res.status(401).json({ success: false, message: "No token provided" });
+  const authHeader = req.headers.authorization || req.headers.Authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    return res.status(401).json({ success: false, message: "No token provided" });
+  }
 
-  const token = authHeader.split(" ")[1] ?? authHeader;
+  const token = authHeader.split(" ")[1];
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.staff = decoded; // attach staff payload
+    req.staff = decoded;
     next();
   } catch (err) {
     return res.status(401).json({ success: false, message: "Invalid or expired token" });
