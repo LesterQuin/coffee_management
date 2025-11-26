@@ -47,6 +47,50 @@ export const createSession = async ({ clientID, userName, pin, qrDataUrl, expire
   }
 };
 
+export const updateGuestToken = async (sessionID, newAccessToken, newRefreshToken) => {
+  const pool = await poolPromise;
+  const result = await pool.request()
+    .input("sessionID", sql.Int, sessionID)
+    .input("newAccessToken", sql.NVarChar, newAccessToken)
+    .input("newRefreshToken", sql.NVarChar, newRefreshToken)
+    .query(`
+      UPDATE sg.LQ_CSS_sessions_info
+      SET accessToken = @newAccessToken,
+          refreshToken = @newRefreshToken
+      WHERE sessionID = @sessionID;
+    `);
+
+
+  // Join role and status names
+  const joinedResult = await pool.request()
+  .input("sessionID", sql.Int, sessionID)
+  .query(`
+    SELECT TOP 1
+       s.sessionID,
+       s.clientID,
+       s.userName,
+       s.pin,
+       s.qrDataUrl,
+       s.expires_at,
+       s.createdAt,
+       s.updatedAt,
+       s.role,
+       s.accessToken,
+       s.refreshToken,
+       c.tokenQr
+    FROM [DHUB].[sg].[LQ_CSS_sessions_info] s
+    LEFT JOIN [DHUB].[sg].[LQ_CSS_client_info] c
+        ON s.clientID = c.clientID
+    WHERE s.sessionID = @sessionID
+  `);
+
+  if (!joinedResult.recordset || joinedResult.recordset.length === 0) {
+    throw new Error("Session not found");
+  }
+  
+  return joinedResult.recordset[0];
+};
+
 // ----------------------PUT-------------------------
 
 // ----------------------DELETE-------------------------

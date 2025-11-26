@@ -3,6 +3,8 @@ import * as Sessions from "../models/sessions_info_model.js";
 import * as Clients from "../models/clients_info_model.js";
 import { success, error } from "../utils/response_helper.js";
 import { generateQrDataUrl } from "../utils/qr_generator.js";
+import * as Model from "../models/staff_info_model.js";
+import jwt from "jsonwebtoken";
 
 // ----------------------GET-------------------------
 
@@ -93,20 +95,46 @@ export const clientLogin = async (req, res) => {
     // Assign default role for client login
     const role = "User";
 
-    // Respond with session info
-    return success(res, {
+    const accessToken = jwt.sign(
+      {
+        sessionID: sessionId,
+        clientID: client.clientID,
+        userName: userName
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "15m" }
+    );
+
+
+    const refreshToken = jwt.sign(
+      { sessionID: sessionId },
+      process.env.JWT_REFRESH_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    await Sessions.updateGuestToken(sessionId, accessToken, refreshToken);
+    res.cookie('guestJwt', refreshToken, {
+      httpOnly: true,
+      secure: false,
+      sameSite: 'None',
+      maxAge: 7 * 24 * 60 * 60 * 1000 
+    });
+
+     const staffData = {
       sessionId,
       clientID: client.clientID,
-      userName: userName || client.deceasedName || `client-${client.clientID}`,
+      userName: userName ,
       deceasedName: client.deceasedName,
       chapelID: client.chapelID,
       chapelName: client.chapelName,
-      role,
+      role: 'User',
       packageNo: client.packageNo,
       packageName: client.packageName,
-      token, // the tokenQr value used for login
+      token,     
       expiresAt
-    }, "Login successful");
+    };
+    console.log("Guest", staffData);
+    return success(res, { accessToken , staff: staffData }, "Login Successful");
 
   } catch (e) {
     console.error("❌ ClientLogin Error:", e);
