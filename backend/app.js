@@ -2,6 +2,9 @@ import express from "express";
 import bodyParser from "body-parser";
 import cors from "cors";
 import corsOptions from "./config/corsOptions.js";
+import cookieParser from "cookie-parser";
+
+import { apiLimiter } from "./middleware/limiter.js";
 
 // Import routes
 import staffRoutes from "./routes/staff_info_route.js";
@@ -19,6 +22,8 @@ import DefaultPackageRoute  from "./routes/default_package_routes.js";
 
 const app = express();
 
+app.use(cookieParser());
+
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
 
@@ -26,6 +31,8 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
 app.use("/uploads", express.static("uploads"));
+
+app.use(apiLimiter);
 
 // API routes
 app.use("/api/staff", staffRoutes);
