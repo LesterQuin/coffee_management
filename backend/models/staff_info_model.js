@@ -226,3 +226,79 @@ LEFT JOIN sg.LQ_CSS_client_info c
       WHERE refreshToken = @refreshToken`);
   return res.recordset[0];
 };
+
+export const clearStaffTokens = async (refreshToken) => {
+  const pool = await poolPromise;
+  const result = await pool.request()
+    .input("refreshToken", sql.NVarChar, refreshToken)
+    .query(`
+      UPDATE sg.LQ_CSS_staff_accounts
+      SET accessToken = NULL, refreshToken  = NULL, updatedAt = GETDATE()
+      OUTPUT inserted.staffID, inserted.firstName, inserted.middleInitial, inserted.lastName,
+            inserted.email, inserted.phone, inserted.roleId, inserted.statusId, inserted.refreshToken
+      WHERE refreshToken = @refreshToken
+    `);
+
+  return result.recordset[0] || null;
+};
+
+export const clearGuestTokens = async (refreshToken) => {
+  const pool = await poolPromise;
+  const result = await pool.request()
+    .input("refreshToken", sql.NVarChar, refreshToken)
+    .query(`
+      UPDATE [DHUB].[sg].[LQ_CSS_sessions_info]
+      SET 
+        accessToken = NULL,
+        refreshToken = NULL,
+        updatedAt = GETDATE()
+      OUTPUT inserted.sessionID, inserted.clientID, inserted.userName
+      WHERE refreshToken = @refreshToken
+    `);
+
+  return result.recordset[0] || null;
+}
+
+export const updateGuestToken = async (sessionID, newAccessToken, newRefreshToken) => {
+  const pool = await poolPromise;
+  const result = await pool.request()
+    .input("sessionID", sql.Int, sessionID)
+    .input("newAccessToken", sql.NVarChar, newAccessToken)
+    .input("newRefreshToken", sql.NVarChar, newRefreshToken)
+    .query(`
+      UPDATE sg.LQ_CSS_sessions_info
+      SET accessToken = @newAccessToken,
+          refreshToken = @newRefreshToken
+      WHERE sessionID = @sessionID;
+    `);
+
+
+  // Join role and status names
+  const joinedResult = await pool.request()
+  .input("sessionID", sql.Int, sessionID)
+  .query(`
+    SELECT TOP 1
+       s.sessionID,
+       s.clientID,
+       s.userName,
+       s.pin,
+       s.qrDataUrl,
+       s.expires_at,
+       s.createdAt,
+       s.updatedAt,
+       s.role,
+       s.accessToken,
+       s.refreshToken,
+       c.tokenQr
+    FROM [DHUB].[sg].[LQ_CSS_sessions_info] s
+    LEFT JOIN [DHUB].[sg].[LQ_CSS_client_info] c
+        ON s.clientID = c.clientID
+    WHERE s.sessionID = @sessionID
+  `);
+
+  if (!joinedResult.recordset || joinedResult.recordset.length === 0) {
+    throw new Error("Session not found");
+  }
+  
+  return joinedResult.recordset[0];
+};
