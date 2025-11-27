@@ -112,6 +112,18 @@ export const clientLogin = async (req, res) => {
       { expiresIn: "7d" }
     );
 
+    res.clearCookie("staffJwt", {
+      httpOnly: true,
+      secure: true,
+      sameSite: "None"
+    });
+
+    res.clearCookie("guestJwt", {
+      httpOnly: true,
+      secure: true,
+      sameSite: "None"
+    });
+
     await Sessions.updateGuestToken(sessionId, accessToken, refreshToken);
     res.cookie('guestJwt', refreshToken, {
       httpOnly: true,
