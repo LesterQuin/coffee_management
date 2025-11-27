@@ -461,41 +461,34 @@ export const updateOrderStatus = async (orderID, status, changeBy = "System") =>
 
     const { clientID, status: currentStatus, updatedAt } = orderRes.recordset[0];
 
-    console.log("Fetched order:", orderRes.recordset[0]);
-
     // Step 1️⃣: Verify order has at least one product in category 3–6
-    const check = await transaction.request()
+    const checkRes = await transaction.request()
       .input("orderID", sql.Int, orderID)
       .query(`
         SELECT COUNT(*) AS count
-        FROM sg.LQ_CSS_fnb_order_items i
-        INNER JOIN sg.LQ_CSS_fnb_products p ON i.productID = p.productID
+        FROM sg.LQ_CSS_fnb_order_items AS i
+        INNER JOIN sg.LQ_CSS_fnb_products AS p ON i.productID = p.productID
         WHERE i.orderID = @orderID AND p.categoryID BETWEEN 3 AND 6
       `);
 
-    if (check.recordset[0].count === 0) {
+    if (checkRes.recordset[0].count === 0) {
       console.warn(`Order ${orderID} has no products in categories 3–6. Skipping category check.`);
     }
 
-    // Step 2️⃣: If cancelling, restore package quantities
+    // Step 2️⃣: Restore package quantities if cancelling
     if (status.toLowerCase() === "cancelled" && currentStatus.toLowerCase() !== "cancelled") {
-
-      // Fetch all consumption logs for this order
       const logsRes = await transaction.request()
-        .input("orderID", sql.Int, orderID)
+        .input("clientID", sql.Int, clientID)
         .query(`
           SELECT productID, packageID, quantity
           FROM sg.LQ_CSS_client_consumption_log
-          WHERE consumedFrom = 'checkout' AND orderID = @orderID
-        `);
+          WHERE consumedFrom = 'checkout' AND clientID = @clientID
+      `);
 
       for (const log of logsRes.recordset) {
         const { productID, packageID, quantity } = log;
 
-        if (!packageID) {
-          console.warn(`No package found for product ${productID}, skipping restore`);
-          continue;
-        }
+        if (!packageID) continue; // skip if no package
 
         const req = transaction.request()
           .input("clientID", sql.Int, clientID)
@@ -503,33 +496,27 @@ export const updateOrderStatus = async (orderID, status, changeBy = "System") =>
           .input("packageID", sql.Int, packageID)
           .input("quantity", sql.Int, quantity);
 
-        // Restore package item quantity
         await req.query(`
           UPDATE sg.LQ_CSS_client_package_items
           SET quantity = quantity + @quantity
           WHERE clientID = @clientID AND productID = @productID AND packageID = @packageID
         `);
 
-        // Restore package remainingQty
         await req.query(`
           UPDATE sg.LQ_CSS_client_packages
           SET remainingQty = remainingQty + @quantity
           WHERE clientID = @clientID AND packageID = @packageID
         `);
 
-        // Log negative consumption
         await req.query(`
           INSERT INTO sg.LQ_CSS_client_consumption_log
           (clientID, productID, packageID, quantity, consumedFrom, createdAt)
           VALUES (@clientID, @productID, @packageID, -@quantity, 'cancelOrder', GETDATE())
         `);
-
-        console.log("Restored item:", { productID, packageID, quantity });
       }
     }
 
     // Step 3️⃣: Update order status
-    console.log("Updating order status...", { orderID, currentStatus, newStatus: status });
     await transaction.request()
       .input("orderID", sql.Int, orderID)
       .input("status", sql.NVarChar, status)
@@ -540,15 +527,13 @@ export const updateOrderStatus = async (orderID, status, changeBy = "System") =>
       `);
 
     // Step 4️⃣: Fetch updated order
-    const res = await transaction.request()
+    const updatedOrder = await transaction.request()
       .input("orderID", sql.Int, orderID)
       .query(`
         SELECT orderID, clientID, status, createdAt, updatedAt, sessionID
         FROM sg.LQ_CSS_fnb_orders
         WHERE orderID = @orderID
       `);
-
-    console.log("Updated order:", res.recordset[0]);
 
     // Step 5️⃣: Log status change
     const now = new Date();
@@ -570,7 +555,7 @@ export const updateOrderStatus = async (orderID, status, changeBy = "System") =>
       `);
 
     await transaction.commit();
-    return res.recordset?.[0];
+    return updatedOrder.recordset[0];
 
   } catch (err) {
     await transaction.rollback();
@@ -578,6 +563,7 @@ export const updateOrderStatus = async (orderID, status, changeBy = "System") =>
     throw new Error(err.message);
   }
 };
+
 
 
 // Update order status
