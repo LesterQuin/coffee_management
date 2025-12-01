@@ -17,6 +17,7 @@ export const staffAuth = (req, res, next) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.staff = decoded;
+    req.role = decoded.role;
     next();
   } catch (err) {
     return res.status(401).json({ success: false, message: "Invalid or expired token" });
