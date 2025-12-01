@@ -198,7 +198,17 @@ export const getStaffByToken = async (refreshToken) => {
   const pool = await poolPromise;
   const res = await pool.request()
     .input("refreshToken", sql.VarChar, refreshToken)
-    .query("SELECT * FROM sg.LQ_CSS_staff_accounts WHERE refreshToken = @refreshToken");
+    .query(`
+      SELECT s.staffID,
+      s.email,
+      s.roleId,
+      role,
+      s.refreshToken
+      FROM sg.LQ_CSS_staff_accounts s
+      INNER JOIN sg.LQ_CSS_roles r
+          ON s.roleId = r.roledId
+      WHERE s.refreshToken = @refreshToken;
+      `);
   return res.recordset[0];
 };
 

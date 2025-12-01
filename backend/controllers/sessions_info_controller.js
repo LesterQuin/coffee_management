@@ -99,7 +99,8 @@ export const clientLogin = async (req, res) => {
       {
         sessionID: sessionId,
         clientID: client.clientID,
-        userName: userName
+        userName: userName,
+        role: "User"
       },
       process.env.JWT_SECRET,
       { expiresIn: "15m" }
@@ -107,7 +108,7 @@ export const clientLogin = async (req, res) => {
 
 
     const refreshToken = jwt.sign(
-      { sessionID: sessionId },
+      { sessionID: sessionId, role: "User" },
       process.env.JWT_REFRESH_SECRET,
       { expiresIn: "7d" }
     );
@@ -127,12 +128,12 @@ export const clientLogin = async (req, res) => {
     await Sessions.updateGuestToken(sessionId, accessToken, refreshToken);
     res.cookie('guestJwt', refreshToken, {
       httpOnly: true,
-      secure: false,
+      secure: true,
       sameSite: 'None',
       maxAge: 7 * 24 * 60 * 60 * 1000 
     });
 
-     const staffData = {
+    const staffData = {
       sessionId,
       clientID: client.clientID,
       userName: userName ,

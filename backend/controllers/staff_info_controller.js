@@ -131,6 +131,7 @@ export const staffLogin = async (req, res) => {
         staffID: staff.staffID,
         email: staff.email,
         roleId: staff.roleId,
+        role: staff.role,
         statusId: staff.statusId
       },
       process.env.JWT_SECRET,
@@ -138,7 +139,7 @@ export const staffLogin = async (req, res) => {
     );
 
     const refreshToken = jwt.sign(
-      { staffID: staff.staffID },
+      { staffID: staff.staffID, role: staff.role },
       process.env.JWT_REFRESH_SECRET,
       { expiresIn: '7d' }
     );
@@ -157,7 +158,7 @@ export const staffLogin = async (req, res) => {
 
     res.cookie('staffJwt', refreshToken, { 
         httpOnly: true, 
-        secure: false,  // secure: true,
+        secure: true,  // secure: true,
         sameSite: 'None', 
          maxAge: 24 * 60 * 60 * 1000 
     });
@@ -165,7 +166,7 @@ export const staffLogin = async (req, res) => {
     await Model.updateStaffToken(staff.staffID, accessToken, refreshToken);
 
     const { passwordHash, ...staffData } = staff;
-
+    
     return success(res, { accessToken, staff: staffData }, "Login Successful");
 
   } catch (e) {
@@ -253,7 +254,7 @@ export const deleteStaff = async (req, res) => {
 export const refreshStaffToken = async (req, res) => {
   try {
     const cookies = req.cookies
-    console.log("cookies1", cookies)
+    // console.log("cookies1", cookies)
 
     if (!cookies || (!cookies.staffJwt && !cookies.guestJwt)) {
       return res.status(401).json({ message: "Refresh token required" });
@@ -275,7 +276,7 @@ export const refreshStaffToken = async (req, res) => {
     }
 
     if (!user) {
-      if (oldStaffToken) {
+      if (oldStaffToken) {  
         res.clearCookie("staffJwt", {
           httpOnly: true,
           secure: true,
@@ -315,12 +316,14 @@ export const refreshStaffToken = async (req, res) => {
             staffID: user.staffID, 
             email: user.email, 
             roleId: user.roleId, 
-            statusId: user.statusId 
+            statusId: user.statusId,
+            role: user.role
           }
         : { 
           sessionID: user.sessionID, 
           clientID: user.clientID, 
-          userName: user.userName 
+          userName: user.userName,
+          role: 'User'
         },
       process.env.JWT_SECRET,
       { expiresIn: "15m" }
@@ -328,8 +331,8 @@ export const refreshStaffToken = async (req, res) => {
 
     const refreshToken = jwt.sign(
       userType === "staff" 
-        ? { staffID: user.staffID } 
-        : { sessionID: user.sessionID },
+        ? { staffID: user.staffID, role: user.role } 
+        : { sessionID: user.sessionID, role: 'User' },
       process.env.JWT_REFRESH_SECRET,
       { expiresIn: '7d' }
     );
@@ -340,8 +343,8 @@ export const refreshStaffToken = async (req, res) => {
 
       res.cookie('staffJwt', refreshToken, { 
           httpOnly: true, 
-          secure: false, 
-          sameSite: 'Lax', 
+          secure: true, 
+          sameSite: 'None', 
           maxAge: 24 * 60 * 60 * 1000 
       });
 
@@ -371,8 +374,8 @@ export const refreshStaffToken = async (req, res) => {
 
       res.cookie('guestJwt', refreshToken, { 
         httpOnly: true, 
-        secure: false, 
-        sameSite: 'Lax', 
+        secure: true, 
+        sameSite: 'None', 
         maxAge: 24 * 60 * 60 * 1000 
       });
        console.log("Guest1")
