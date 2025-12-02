@@ -76,6 +76,10 @@ export const clientLogin = async (req, res) => {
     if (!client) return error(res, "Invalid token", 404);
     if (client.status !== "Active") return error(res, "Client inactive", 400);
 
+    // Validate schedule
+    if (client.scheduleTo && new Date(client.scheduleTo) < new Date()) {
+      return error(res, "Client schedule has expired!", 400);
+    } 
     // Validate daily PIN
     //const todayPin = Clients.generateDailyPin(client.clientID);
     if (pin !== client.pin) return error(res, "Invalid PIN", 400);
