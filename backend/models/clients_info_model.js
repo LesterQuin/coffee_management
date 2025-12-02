@@ -448,11 +448,28 @@ export const getClientByTokenQr = async (tokenQr) => {
     const result = await pool.request()
       .input("tokenQr", sql.NVarChar(100), tokenQr)
       .query(`
-        SELECT *
+        SELECT 
+          clientID,
+          deceasedName,
+          chapelID,
+          packageNo,
+          tokenQr,
+          status,
+          pin,
+          schedule_from,
+          schedule_to
         FROM sg.LQ_CSS_client_info
         WHERE tokenQr = @tokenQr
       `);
-    return result.recordset[0] || null;
+    
+    const client = result.recordset[0];
+    if (!client) return null;
+
+    return {
+      ...client,
+      scheduleFrom: client.schedule_from,
+      scheduleTo: client.schedule_to
+    };
   } catch (err) {
     console.error("❌ getClientByTokenQr error:", err);
     throw err;
