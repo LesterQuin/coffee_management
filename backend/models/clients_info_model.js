@@ -764,8 +764,8 @@ export const registerClientWithQR = async (client, userName) => {
         packageBalance, additionalBalance, clientSecret, status, createdAt, updatedAt)
       VALUES
         (@deceasedName, @registeredBy, @mobileNo, @email,
-         CAST(@scheduleFrom AS DATETIME), CAST(@scheduleTo AS DATETIME),
-         @chapelID, @pin, @packageBalance, @additionalBalance, @clientSecret, 'Active', GETDATE(), GETDATE());
+          CAST(@scheduleFrom AS DATETIME), CAST(@scheduleTo AS DATETIME),
+          @chapelID, @pin, @packageBalance, @additionalBalance, @clientSecret, 'Active', GETDATE(), GETDATE());
       SELECT SCOPE_IDENTITY() AS clientID;
     `);
 
@@ -801,6 +801,9 @@ export const registerClientWithQR = async (client, userName) => {
   }
 
   // 4️⃣ Insert packages & items
+  // Pads single-digit numbers with a leading zero
+  const pad = (num) => num.toString().padStart(2, '0');
+
   for (const pkgID of packageIDs) {
     const extraPkg = (client.extraPackages || []).find(ep => Number(ep.packageId) === pkgID);
 
@@ -811,12 +814,20 @@ export const registerClientWithQR = async (client, userName) => {
       validFromStr = `${extraPkg.startDate} ${extraPkg.startTime}:00`;
       validToStr   = `${extraPkg.endDate} ${extraPkg.endTime}:00`;
     } else {
-      // Default package: start = scheduleFrom, end = scheduleTo minus 1 day
-      validFromStr = scheduleFromStr;
-      const scheduleToDateObj = new Date(`${client.scheduleTo} 23:59:00`);
-scheduleToDateObj.setDate(scheduleToDateObj.getDate() - 1);
-const pad = n => n.toString().padStart(2,'0');
-validToStr = `${scheduleToDateObj.getFullYear()}-${pad(scheduleToDateObj.getMonth()+1)}-${pad(scheduleToDateObj.getDate())} ${pad(scheduleToDateObj.getHours())}:${pad(scheduleToDateObj.getMinutes())}:${pad(scheduleToDateObj.getSeconds())}`;
+      // Default package
+      const fromParts = client.scheduleFrom.split("-").map(Number);
+      const toParts   = client.scheduleTo.split("-").map(Number);
+
+      validFromStr = `${fromParts[0]}-${pad(fromParts[1])}-${pad(fromParts[2])} 00:01:00`;
+      
+      // Only subtract 1 day if scheduleFrom and scheduleTo are different
+      if (client.scheduleFrom !== client.scheduleTo) {
+        const scheduleToDateObj = new Date(`${client.scheduleTo} 23:59:00`);
+        scheduleToDateObj.setDate(scheduleToDateObj.getDate() - 1);
+        validToStr = `${scheduleToDateObj.getFullYear()}-${pad(scheduleToDateObj.getMonth()+1)}-${pad(scheduleToDateObj.getDate())} 23:59:00`;
+      } else {
+        validToStr = `${toParts[0]}-${pad(toParts[1])}-${pad(toParts[2])} 23:59:00`;
+      }
     }
 
     // Fetch package details
@@ -847,7 +858,7 @@ validToStr = `${scheduleToDateObj.getFullYear()}-${pad(scheduleToDateObj.getMont
           (clientID, packageID, packageName, quantity, remainingQty, totalValue, validFrom, validTo, createdAt)
         VALUES
           (@clientID, @packageID, @packageName, @packageQuantity, @remainingQty, @totalValue,
-           CAST(@validFrom AS DATETIME), CAST(@validTo AS DATETIME), GETDATE());
+            CAST(@validFrom AS DATETIME), CAST(@validTo AS DATETIME), GETDATE());
       `);
 
     // Insert package items
@@ -879,6 +890,15 @@ validToStr = `${scheduleToDateObj.getFullYear()}-${pad(scheduleToDateObj.getMont
     .query(`UPDATE sg.LQ_CSS_client_info SET tokenQr = @tokenQr WHERE clientID = @clientID`);
 
   const qrDataUrl = await generateQrDataUrl({ tokenQr });
+
+  await pool.request()
+    .input("clientID", sql.Int, clientID)
+    .input("qrDataUrl", sql.NVarChar(sql.MAX), qrDataUrl)
+    .query(`
+      UPDATE sg.LQ_CSS_client_info
+      SET qrCodeBase64 = @qrDataUrl 
+      WHERE clientID = @clientID`)
+  
   const sessionID = await createSession({
     clientID,
     userName,
@@ -911,6 +931,24 @@ validToStr = `${scheduleToDateObj.getFullYear()}-${pad(scheduleToDateObj.getMont
   };
 }; //working code with new registration
 
+export const deactivateExpiredClients = async () => {
+  const pool = await poolPromise;
+
+  const result = await pool.request().query(`
+    UPDATE ci
+    SET ci.status = s.statusId,
+        ci.updatedAt = GETDATE()
+    FROM sg.LQ_CSS_client_info ci
+    JOIN sg.LQ_CSS_status s
+      ON s.status = 'Inactive'
+    AND s.category = 'User'
+    WHERE ci.schedule_to < GETDATE()
+      AND ci.status <> 'Inactive';
+  `);
+
+  return result.rowsAffected[0] ?? 0;
+};
+
 // export const generateQrDataUrl = async (payload) => {
 //   if (!payload || !payload.clientID) throw new Error("clientID required for QR");
 //   const loginUrl = `http://localhost:5000/clients/login?clientID=${encodeURIComponent(payload.clientID)}`;
@@ -921,8 +959,9 @@ export const generateQrDataUrl = async (payload) => {
   if (!payload || !payload.tokenQr) throw new Error("tokenQr required for QR");
 
   // Replace with your front-end login URLhttps://heritage.capitalbrew.com.ph
-  // const loginUrl = `http://192.168.50.26:3000/login?token=${encodeURIComponent(payload.tokenQr)}`;
-  const loginUrl = `https://heritage.capitalbrew.com.ph/login?token=${encodeURIComponent(payload.tokenQr)}`;
+  // const loginUrl = `http://192.168.50.26:3000/login?token=${encodeURIComponent(payload.tokenQr)}`; 
+ // const loginUrl = `https://heritage.capitalbrew.com.ph/login?token=${encodeURIComponent(payload.tokenQr)}`;
+  const loginUrl = `https://heritagecapitalbrew.phillife.com.ph/login?token=${encodeURIComponent(payload.tokenQr)}`;
 
   return QRCode.toDataURL(loginUrl, { 
     errorCorrectionLevel: 'H', 
@@ -1171,18 +1210,19 @@ export const updateClient = async (client) => {
       for (const cp of client.contactPersons) {
         if (!cp.name || !cp.number) continue;
         await transaction.request()
+          .input("contactID", sql.Int, cp.contactID || 0) 
           .input("clientID", sql.Int, client.clientID)
           .input("contactPersonName", sql.NVarChar(150), cp.name)
           .input("contactPersonNumber", sql.NVarChar(50), cp.number)
           .query(`
-            IF EXISTS (SELECT 1 FROM sg.LQ_CSS_client_contacts 
-                      WHERE clientID = @clientID AND contactPersonNumber = @contactPersonNumber)
-              UPDATE sg.LQ_CSS_client_contacts 
-              SET contactPersonName = @contactPersonName
-              WHERE clientID = @clientID AND contactPersonNumber = @contactPersonNumber
+            IF EXISTS (SELECT 1 FROM sg.LQ_CSS_client_contacts WHERE contactID = @contactID)
+                UPDATE sg.LQ_CSS_client_contacts
+                SET contactPersonName = @contactPersonName,
+                    contactPersonNumber = @contactPersonNumber
+                WHERE contactID = @contactID
             ELSE
-              INSERT INTO sg.LQ_CSS_client_contacts (clientID, contactPersonName, contactPersonNumber)
-              VALUES (@clientID, @contactPersonName, @contactPersonNumber)
+                INSERT INTO sg.LQ_CSS_client_contacts (clientID, contactPersonName, contactPersonNumber)
+                VALUES (@clientID, @contactPersonName, @contactPersonNumber)
           `);
       }
     }

@@ -129,7 +129,7 @@ export const registerClient = async (req, res) => {
 
     // 2️⃣ Extract new client ID and initial PIN
     const newClientID = result?.data?.client?.clientID;
-    let activePin = result?.data?.client?.pin; // initial PIN from model
+    let activePin = result?.data?.client?.pin; // 👈 initial PIN from model
     if (!newClientID) return error(res, "Failed to register client ID");
 
     // 3️⃣ Optionally generate a new daily PIN (overwrite)
@@ -138,25 +138,12 @@ export const registerClient = async (req, res) => {
       await Model.updateClientPin(newClientID, activePin);
     }
 
-    // 4️⃣ Fetch current status after insertion
-    const pool = await poolPromise;
-    const statusRes = await pool.request()
-      .input("clientID", sql.Int, newClientID)
-      .query(`
-        SELECT s.status
-        FROM sg.LQ_CSS_client_info ci
-        INNER JOIN sg.LQ_CSS_status s ON ci.status = s.statusId
-        WHERE ci.clientID = @clientID
-      `);
-
-    const currentStatus = statusRes.recordset?.[0]?.status || "Active";
-
-    // 5️⃣ Return success with correct active PIN and status
+    // 4️⃣ Return success with correct active PIN
     return success(
       res,
       {
         ...result.data,
-        todayPin: activePin,
+        todayPin: activePin, // 👈 always include the valid PIN
         status: currentStatus
       },
       req.body.generatePin
