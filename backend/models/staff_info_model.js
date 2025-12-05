@@ -38,9 +38,33 @@ export const getStaffByEmail = async (email) => {
 // Get staff by ID
 export const getStaffByID = async (staffID) => {
   const pool = await poolPromise;
+
+  const query = `
+    SELECT 
+      s.staffID,
+      s.email,
+      s.phone,
+      s.createdAt,
+      s.updatedAt,
+      s.firstName,
+      s.middleInitial,
+      s.lastName,
+      s.roleId,
+      r.role AS roleName,
+      s.statusId,
+      st.status AS statusName
+    FROM sg.LQ_CSS_staff_accounts AS s
+    LEFT JOIN sg.LQ_CSS_roles AS r 
+      ON s.roleId = r.roledId
+    LEFT JOIN sg.LQ_CSS_status AS st
+      ON s.statusId = st.statusId
+    WHERE s.staffID = @staffID
+  `;
+
   const res = await pool.request()
     .input("staffID", sql.Int, staffID)
-    .query("SELECT * FROM sg.LQ_CSS_staff_accounts WHERE staffID = @staffID");
+    .query(query);
+
   return res.recordset[0];
 };
 
