@@ -50,6 +50,7 @@ export const getStaffByID = async (staffID) => {
       s.middleInitial,
       s.lastName,
       s.roleId,
+      s.passwordHash,      
       r.role AS roleName,
       s.statusId,
       st.status AS statusName
@@ -173,6 +174,45 @@ export const updateStaff = async (staff) => {
   const result = await request.query(query);
 
   return result.rowsAffected[0] > 0;
+};
+
+export const updateStaffByID = async (staffID, { firstName, middleInitial, lastName, passwordHash }) => {
+  const pool = await poolPromise;
+
+  let query = `
+    UPDATE sg.LQ_CSS_staff_accounts
+    SET firstName = @firstName,
+        middleInitial = @middleInitial,
+        lastName = @lastName,
+        updatedAt = GETDATE()
+  `;
+
+  if (passwordHash !== undefined) {
+    query += `,
+        passwordHash = @passwordHash
+    `;
+  }
+
+  query += `
+    WHERE staffID = @staffID;
+
+    SELECT staffID, firstName, middleInitial, lastName, passwordHash
+    FROM sg.LQ_CSS_staff_accounts
+    WHERE staffID = @staffID;
+  `;
+
+  const request = pool.request()
+    .input("staffID", sql.Int, staffID)
+    .input("firstName", sql.NVarChar, firstName)
+    .input("middleInitial", sql.NVarChar, middleInitial || null)
+    .input("lastName", sql.NVarChar, lastName);
+
+  if (passwordHash !== undefined) {
+    request.input("passwordHash", sql.NVarChar, passwordHash);
+  }
+
+  const res = await request.query(query);
+  return res.recordset[0];
 };
 
 // ----------------------DELETE-------------------------

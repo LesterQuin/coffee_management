@@ -26,6 +26,8 @@ router.post("/logout", staffAuth, Controller.staffLogout);
 // ----------------------PUT-------------------------
 // Update staff information (role-based validation)
 router.put("/:staffID", staffAuth, verifyRoles(ROLES_LIST.ADMIN, ROLES_LIST.SUPER_ADMIN), Controller.updateStaff);
+// Update Info
+router.put("/info/:staffID", staffAuth, verifyRoles(ROLES_LIST.ADMIN, ROLES_LIST.SUPER_ADMIN), Controller.updateStaffInfo);
 
 // ----------------------DELETE-------------------------
 // DELETE /api/staff/:staffID

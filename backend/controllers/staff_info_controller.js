@@ -5,8 +5,7 @@ import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import { success, error } from "../utils/response_helper.js";
 import { generateRefreshToken } from "../utils/token.js";
-
-
+import { update } from "./clients_info_controller.js";
 
 dotenv.config();
 
@@ -230,6 +229,46 @@ export const updateStaff = async (req, res) => {
     return res.json({ success: true, message: "Staff updated successfully" });
   } catch (err) {
     console.error("Update staff error:", err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+export const updateStaffInfo = async (req, res) => {
+  const { staffID } = req.params;
+  const { firstName, middleInitial, lastName, oldPassword, newPassword } = req.body;
+
+  try {
+    // 1. Fetch current staff
+    const staff = await Model.getStaffByID(staffID);
+    if (!staff) return res.status(404).json({ success: false, message: "Staff not found" });
+
+    // 2. Handle password change (optional)
+    let passwordHash;
+    if (newPassword) {
+      if (!oldPassword)
+        return res.status(400).json({ success: false, message: "Old password is required" });
+
+      const isMatch = await bcrypt.compare(oldPassword, staff.passwordHash);
+      if (!isMatch)
+        return res.status(400).json({ success: false, message: "Old password is incorrect" });
+
+      passwordHash = await bcrypt.hash(newPassword, 10);
+    }
+
+    // 3. Prepare fields for update — keep existing if not provided
+    const updatedData = {
+      firstName: firstName ?? staff.firstName,
+      middleInitial: middleInitial ?? staff.middleInitial,
+      lastName: lastName ?? staff.lastName,
+      passwordHash: passwordHash ?? staff.passwordHash, // ensure not null
+    };
+
+    // 4. Update staff in DB
+    const updatedStaff = await Model.updateStaffByID(staffID, updatedData);
+
+    return res.json({ success: true, data: updatedStaff });
+
+  } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
