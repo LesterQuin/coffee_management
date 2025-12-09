@@ -144,7 +144,7 @@ export const registerClient = async (req, res) => {
       {
         ...result.data,
         todayPin: activePin, // 👈 always include the valid PIN
-        status: currentStatus
+        //status: currentStatus
       },
       req.body.generatePin
         ? "Client registered successfully. New PIN generated."
