@@ -2,6 +2,7 @@
 import dotenv from "dotenv";
 import app from "./app.js"; //  Import your main app with all routes and middleware
 import { sql, poolPromise } from "./config/db_config.js"; // optional if you still want to test DB connection
+import { server } from "./socket-io/socket-setup.js";
 
 dotenv.config();
 
@@ -26,4 +27,4 @@ app.get("/api/db-version", async (req, res) => {
 });
 
 // Start server
-app.listen(PORT,  '0.0.0.0', () => console.log(`🚀 Server running on port ${PORT}`));
+server.listen(PORT,  '0.0.0.0', () => console.log(`🚀 Server running on port ${PORT}`));

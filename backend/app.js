@@ -3,6 +3,7 @@ import bodyParser from "body-parser";
 import cors from "cors";
 import corsOptions from "./config/corsOptions.js";
 import cookieParser from "cookie-parser";
+import { app } from "./socket-io/socket-setup.js";
 
 import { apiLimiter } from "./middleware/limiter.js";
 
@@ -20,7 +21,7 @@ import fnbPackageRoutes from "./routes/fnb_package_route.js"
 import tableRoutes from "./routes/table_routes.js"
 import DefaultPackageRoute  from "./routes/default_package_routes.js";
 
-const app = express();
+//const app = express();
 
 app.use(cookieParser());
 

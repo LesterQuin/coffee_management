@@ -1,6 +1,7 @@
 // controllers/chapel_info_controller.js
 import { poolPromise } from "../config/db_config.js";
 import * as Model from "../models/chapel_info_model.js";
+import { io } from "../socket-io/socket-setup.js";
 import { success, error } from "../utils/response_helper.js";
 
 
@@ -59,6 +60,7 @@ export const create = async (req, res) => {
     }
 
     const chapel = await Model.createChapelWithPackage(chapelName, description, packageID, statusId);
+    io.emit("newChapelCreated", 'chapel');
     return success(res, chapel, "Chapel created successfully");
   } catch (e) {
     return error(res, e.message);
@@ -95,7 +97,7 @@ export const updateChapel = async (req, res) => {
         message: "Chapel not found or no fields to update"
       });
     }
-
+    io.emit("newChapelCreated", 'chapel' );
     return res.json({
       success: true,
       message: "Chapel updated successfully"
